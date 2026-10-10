@@ -1,0 +1,19 @@
+# Runtime data: database, uploads, trained models, generated secret — recreated by run.py
+/data/
+
+# Python
+/.venv/
+__pycache__/
+*.py[cod]
+
+# Frontend dependencies and caches (frontend/out, the built site, is committed so Node isn't needed to run the app)
+/frontend/node_modules/
+/frontend/.next/
+
+# End-to-end tests
+/e2e/node_modules/
+/e2e/.auth/
+/e2e/test-results/
+/e2e/playwright-report/
+
+.DS_Store
