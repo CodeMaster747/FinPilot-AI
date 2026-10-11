@@ -1,0 +1,11 @@
+{
+  "version": "2026.10.3+sklearn1.9.1",
+  "metrics": {
+    "train_examples": 4140,
+    "test_examples": 1116,
+    "accuracy": 0.9167,
+    "macro_f1": 0.9153,
+    "classes": 25,
+    "train_seconds": 6.8
+  }
+}

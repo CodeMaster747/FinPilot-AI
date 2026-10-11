@@ -1,0 +1,34 @@
+[
+  {
+    "name": "nilgiris.png",
+    "label": "Nilgiris supermarket (matches a card payment)",
+    "kind": "image",
+    "total": "894",
+    "merchant": "Nilgiris",
+    "date": "2026-09-22"
+  },
+  {
+    "name": "decathlon-photo.jpg",
+    "label": "Decathlon \u2014 a tilted phone photo",
+    "kind": "image",
+    "total": "449",
+    "merchant": "Decathlon",
+    "date": "2026-09-17"
+  },
+  {
+    "name": "a2b-cash.png",
+    "label": "A2B restaurant, paid in cash (no bank alert)",
+    "kind": "image",
+    "total": "556.50",
+    "merchant": "A2B",
+    "date": "2026-10-11"
+  },
+  {
+    "name": "act-invoice.pdf",
+    "label": "ACT Fibernet invoice (digital PDF)",
+    "kind": "pdf",
+    "total": "1179.00",
+    "merchant": "ACT Fibernet",
+    "date": "2026-10-06"
+  }
+]

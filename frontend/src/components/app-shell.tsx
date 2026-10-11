@@ -1,0 +1,160 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowLeftRight,
+  CircleCheck,
+  Gauge,
+  Inbox,
+  Lightbulb,
+  LoaderCircle,
+  LogOut,
+  Menu,
+  PiggyBank,
+  Plug,
+  Receipt,
+  Repeat,
+  ScanLine,
+  Settings,
+  ShoppingBag,
+  TrendingUp,
+} from "lucide-react";
+import { useState } from "react";
+
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { api, get } from "@/lib/api";
+import { useSystemStatus } from "@/lib/hooks";
+import type { User } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const NAV = [
+  { href: "/dashboard/", label: "Dashboard", icon: Gauge },
+  { href: "/transactions/", label: "Transactions", icon: ArrowLeftRight },
+  { href: "/connections/", label: "Connections", icon: Plug },
+  { href: "/review/", label: "Review", icon: Inbox, badge: "review" },
+  { href: "/scan/", label: "Scan a receipt", icon: ScanLine },
+  { href: "/forecast/", label: "Forecast", icon: TrendingUp },
+  { href: "/subscriptions/", label: "Subscriptions", icon: Repeat },
+  { href: "/picks/", label: "Smart Picks", icon: ShoppingBag, badge: "picks" },
+  { href: "/insights/", label: "Insights & coach", icon: Lightbulb },
+  { href: "/budgets/", label: "Budgets & goals", icon: PiggyBank },
+  { href: "/tax/", label: "Tax", icon: Receipt },
+  { href: "/settings/", label: "Settings", icon: Settings },
+];
+
+const JOB_LABELS: Record<string, string> = {
+  bootstrap_demo: "Preparing demo data",
+  user_analytics: "Updating your insights",
+  ingest_sample: "Reading the sample inbox",
+  ingest_file: "Reading your file",
+  crawl_all: "Crawling the demo stores",
+  refresh_picks: "Finding products you can afford",
+};
+
+function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const review = useQuery({ queryKey: ["review-counts"], queryFn: () => get<{ counts: { messages: number; transactions: number } }>("/review"),
+    staleTime: 30_000 });
+  const reviewCount = (review.data?.counts.messages ?? 0) + (review.data?.counts.transactions ?? 0);
+  return (
+    <nav className="flex flex-col gap-0.5">
+      {NAV.map(({ href, label, icon: Icon, badge }) => {
+        const active = pathname === href || pathname === href.slice(0, -1);
+        return (
+          <Link key={href} href={href} onClick={onNavigate}
+            className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
+            <Icon className="size-4 shrink-0" aria-hidden />
+            <span className="flex-1">{label}</span>
+            {badge === "review" && reviewCount > 0 && (
+              <span className="rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground tabular">{reviewCount}</span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function ActivityBanner({ userId }: { userId: number }) {
+  const status = useSystemStatus();
+  const jobs = (status.data?.active_jobs ?? []).filter((j) => j.user_id === userId || j.user_id === null)
+    .filter((j) => JOB_LABELS[j.kind]);
+  if (!jobs.length) return null;
+  const j = jobs[0];
+  return (
+    <div role="status" className="flex items-center gap-2 border-b border-border bg-secondary px-4 py-2 text-sm text-secondary-foreground md:px-8">
+      <LoaderCircle className="size-4 animate-spin" aria-hidden />
+      <span className="font-medium">{JOB_LABELS[j.kind]}</span>
+      <span className="text-muted-foreground">{j.message ? `— ${j.message}` : ""} {j.progress ? `(${j.progress}%)` : ""}</span>
+      {jobs.length > 1 && <span className="ml-auto text-xs text-muted-foreground">+{jobs.length - 1} more in the background</span>}
+    </div>
+  );
+}
+
+export function AppShell({ user, children }: { user: User; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+  const qc = useQueryClient();
+
+  async function logout() {
+    await api("/auth/logout", { method: "POST", noRedirect: true }).catch(() => null);
+    qc.clear();
+    router.replace("/login/");
+  }
+
+  const brand = (
+    <Link href="/dashboard/" className="flex items-center gap-2 px-3 py-1">
+      <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"><CircleCheck className="size-4" /></span>
+      <span className="text-base font-semibold tracking-tight">FinPilot AI</span>
+    </Link>
+  );
+  const footer = (
+    <div className="mt-auto border-t border-border px-3 pt-3 text-sm">
+      <div className="truncate font-medium">{user.name}</div>
+      <div className="truncate text-xs text-muted-foreground">{user.is_demo ? "Demo account" : user.email}</div>
+      <Button variant="ghost" size="sm" className="mt-2 -ml-2" onClick={logout}><LogOut /> Sign out</Button>
+    </div>
+  );
+
+  return (
+    <div className="flex min-h-screen">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-4 border-r border-border bg-sidebar p-3 md:flex">
+        {brand}
+        <NavLinks />
+        {footer}
+      </aside>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="left" className="flex w-72 flex-col gap-4 p-3">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          {brand}
+          <NavLinks onNavigate={() => setOpen(false)} />
+          {footer}
+        </SheetContent>
+      </Sheet>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center gap-2 border-b border-border bg-card px-4 py-2 md:hidden">
+          <Button variant="ghost" size="icon" aria-label="Open navigation" onClick={() => setOpen(true)}><Menu /></Button>
+          <span className="font-semibold">FinPilot AI</span>
+        </header>
+        <ActivityBanner userId={user.id} />
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+export function PageHeader({ title, description, actions }: { title: string; description?: React.ReactNode; actions?: React.ReactNode }) {
+  return (
+    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        {description && <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{description}</p>}
+      </div>
+      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+    </div>
+  );
+}

@@ -1,0 +1,200 @@
+# Per-bank SMS templates (high precision). Anything that doesn't match falls back to the generic
+# extractor in extract.py. Named groups: amount, mask, payee, date, time, ref, balance, limit, due,
+# total, min, account. Dates are parsed with the listed formats.
+
+- id: hdfc_upi_debit
+  header: HDFCBK
+  kind: transaction
+  direction: debit
+  channel: upi
+  account_kind: savings
+  regex: 'Sent Rs\.(?P<amount>[\d,]+\.\d{2})\s*\nFrom HDFC Bank A/C \*(?P<mask>\d{4})\s*\nTo (?P<payee>[^\n]+)\nOn (?P<date>\d{2}/\d{2}/\d{2})\s*\nRef (?P<ref>\d+)'
+  date_formats: ['%d/%m/%y']
+
+- id: hdfc_dcard
+  header: HDFCBK
+  kind: transaction
+  direction: debit
+  channel: card
+  account_kind: savings
+  regex: 'Spent Rs\.(?P<amount>[\d,]+\.\d{2}) On HDFC Bank Card (?P<mask>\d{4}) At (?P<payee>.+?) On (?P<date>\d{4}-\d{2}-\d{2}):(?P<time>\d{2}:\d{2}:\d{2})'
+  date_formats: ['%Y-%m-%d']
+
+- id: hdfc_nach
+  header: HDFCBK
+  kind: transaction
+  direction: debit
+  channel: nach
+  account_kind: savings
+  regex: 'Rs\.(?P<amount>[\d,]+\.\d{2}) debited from A/c XX(?P<mask>\d{4}) on (?P<date>\d{2}-[A-Z]{3}-\d{2}) towards ACH D- (?P<payee>.+?) Ref (?P<ref>\w+)\. Avl Bal Rs\.(?P<balance>[\d,]+\.\d{2})'
+  date_formats: ['%d-%b-%y']
+
+- id: hdfc_imps_out
+  header: HDFCBK
+  kind: transaction
+  direction: debit
+  channel: imps
+  account_kind: savings
+  regex: 'Rs\.(?P<amount>[\d,]+\.\d{2}) debited from HDFC Bank A/c XX(?P<mask>\d{4}) on (?P<date>\d{2}-\d{2}-\d{2}) to (?P<payee>.+?) via IMPS\. Ref (?P<ref>\w+)\. Avl bal Rs\.(?P<balance>[\d,]+\.\d{2})'
+  date_formats: ['%d-%m-%y']
+
+- id: hdfc_neft_credit
+  header: HDFCBK
+  kind: transaction
+  direction: credit
+  channel: neft
+  account_kind: savings
+  regex: 'INR (?P<amount>[\d,]+\.\d{2}) deposited in HDFC Bank A/c XX(?P<mask>\d{4}) on (?P<date>\d{2}-[A-Z]{3}-\d{2}) for NEFT Cr-\w+-(?P<payee>.+)-(?P<ref>\w+)\.\s*Avl bal INR (?P<balance>[\d,]+\.\d{2})'
+  date_formats: ['%d-%b-%y']
+
+- id: hdfc_atm
+  header: HDFCBK
+  kind: transaction
+  direction: debit
+  channel: atm
+  account_kind: savings
+  regex: 'Rs\.(?P<amount>[\d,]+\.\d{2}) withdrawn at (?P<payee>.+?) from A/c XX(?P<mask>\d{4}) on (?P<date>\d{2}-[A-Z]{3}-\d{2})\. Avl bal: Rs\.(?P<balance>[\d,]+\.\d{2})'
+  date_formats: ['%d-%b-%y']
+
+- id: hdfc_interest
+  header: HDFCBK
+  kind: transaction
+  direction: credit
+  channel: interest
+  account_kind: savings
+  payee: INTEREST CREDIT
+  regex: 'interest of Rs\.(?P<amount>[\d,]+\.\d{2}) has been credited to your HDFC Bank A/c XX(?P<mask>\d{4}) on (?P<date>\d{2}-[A-Z]{3}-\d{2})\. Avl bal Rs\.(?P<balance>[\d,]+\.\d{2})'
+  date_formats: ['%d-%b-%y']
+
+- id: hdfc_upi_credit
+  header: HDFCBK
+  kind: transaction
+  direction: credit
+  channel: upi
+  account_kind: savings
+  regex: 'Received Rs\.(?P<amount>[\d,]+\.\d{2}) in your HDFC Bank A/c XX(?P<mask>\d{4}) from (?P<payee>.+?) on (?P<date>\d{2}-\d{2}-\d{2})\. UPI Ref No\. (?P<ref>\d+)'
+  date_formats: ['%d-%m-%y']
+
+- id: hdfc_reversal
+  header: HDFCBK
+  kind: failed_or_reversed
+  direction: credit
+  channel: upi
+  account_kind: savings
+  regex: 'Rs\.(?P<amount>[\d,]+\.\d{2}) reversed to your HDFC Bank A/c XX(?P<mask>\d{4}) on (?P<date>\d{2}-\d{2}-\d{2}) against UPI Ref (?P<ref>\d+)'
+  date_formats: ['%d-%m-%y']
+
+- id: hdfc_failed
+  header: HDFCBK
+  kind: failed_or_reversed
+  direction: debit
+  channel: upi
+  regex: 'Your UPI transaction of Rs\.(?P<amount>[\d,]+\.\d{2}) to (?P<payee>.+?) has failed'
+
+- id: hdfc_balance
+  header: HDFCBK
+  kind: balance
+  account_kind: savings
+  regex: 'Available Bal in HDFC Bank A/c XX(?P<mask>\d{4}) as on (?P<date>\d{2}-[A-Z]{3}-\d{2}) is Rs\.(?P<balance>[\d,]+\.\d{2})'
+  date_formats: ['%d-%b-%y']
+
+- id: icici_card_spend
+  header: ICICIT
+  kind: transaction
+  direction: debit
+  channel: card
+  account_kind: credit_card
+  regex: 'INR (?P<amount>[\d,]+\.\d{2}) spent using ICICI Bank Card XX(?P<mask>\d{4}) on (?P<date>\d{2}-[A-Za-z]{3}-\d{2}) on (?P<payee>.+?)\. Avl Limit: INR (?P<limit>[\d,]+\.\d{2})'
+  date_formats: ['%d-%b-%y']
+
+- id: icici_payment
+  header: ICICIT
+  kind: transaction
+  direction: credit
+  channel: card_payment
+  account_kind: credit_card
+  payee: CARD PAYMENT RECEIVED
+  regex: 'Payment of INR (?P<amount>[\d,]+\.\d{2}) has been received towards your ICICI Bank Credit Card Account XX(?P<mask>\d{4}) on (?P<date>\d{2}-[A-Za-z]{3}-\d{2})'
+  date_formats: ['%d-%b-%y']
+
+- id: icici_refund
+  header: ICICIT
+  kind: refund
+  direction: credit
+  channel: card
+  account_kind: credit_card
+  regex: 'refund of INR (?P<amount>[\d,]+\.\d{2}) from (?P<payee>.+?) has been credited to your ICICI Bank Credit Card XX(?P<mask>\d{4}) on (?P<date>\d{2}-[A-Za-z]{3}-\d{2})'
+  date_formats: ['%d-%b-%y']
+
+- id: icici_statement
+  header: ICICIT
+  kind: statement
+  account_kind: credit_card
+  payee: ICICI Credit Card
+  regex: 'ICICI Bank Credit Card XX(?P<mask>\d{4}) Statement: Total Amount Due INR (?P<total>[\d,]+\.\d{2}); Minimum Amount Due INR (?P<min>[\d,]+\.\d{2}); Payment Due Date (?P<due>\d{2}-[A-Za-z]{3}-\d{2})'
+  date_formats: ['%d-%b-%y']
+
+- id: sbi_upi_debit
+  header: SBIUPI
+  kind: transaction
+  direction: debit
+  channel: upi
+  account_kind: savings
+  regex: 'A/C X(?P<mask>\d{4}) debited by (?P<amount>[\d,]+(?:\.\d{1,2})?) on date (?P<date>\d{2}[A-Za-z]{3}\d{2}) trf to (?P<payee>.+?) Refno (?P<ref>\d+)'
+  date_formats: ['%d%b%y']
+
+- id: sbi_imps_credit
+  header: SBIINB
+  kind: transaction
+  direction: credit
+  channel: imps
+  account_kind: savings
+  regex: 'your A/c X(?P<mask>\d{4}) is credited by Rs\.(?P<amount>[\d,]+\.\d{2}) on (?P<date>\d{2}-\d{2}-\d{2}) by IMPS \(Ref no (?P<ref>\w+)\) from (?P<payee>.+?)\. -SBI'
+  date_formats: ['%d-%m-%y']
+
+- id: sbi_nach
+  header: SBIINB
+  kind: transaction
+  direction: debit
+  channel: nach
+  account_kind: savings
+  regex: 'Your a/c no\. X+(?P<mask>\d{4}) is debited for Rs\.(?P<amount>[\d,]+\.\d{2}) on (?P<date>\d{2}-\d{2}-\d{2}) by NACH towards (?P<payee>.+?)\. Avl Bal Rs\.(?P<balance>[\d,]+\.\d{2})'
+  date_formats: ['%d-%m-%y']
+
+- id: sbi_interest
+  header: SBIINB
+  kind: transaction
+  direction: credit
+  channel: interest
+  account_kind: savings
+  payee: INTEREST CREDIT
+  regex: 'interest of Rs\.(?P<amount>[\d,]+\.\d{2}) has been credited to your A/c X(?P<mask>\d{4}) on (?P<date>\d{2}-\d{2}-\d{2})'
+  date_formats: ['%d-%m-%y']
+
+- id: sbi_balance
+  header: SBIINB
+  kind: balance
+  account_kind: savings
+  regex: 'Your A/c X(?P<mask>\d{4}) has a balance of Rs\.(?P<balance>[\d,]+\.\d{2}) as on (?P<date>\d{2}-\d{2}-\d{2})'
+  date_formats: ['%d-%m-%y']
+
+- id: tnpdcl_bill
+  header: TNPDCL
+  kind: bill_due
+  payee: TNPDCL
+  regex: 'TNPDCL bill for SC No\.(?P<account>[\d-]+) is Rs\.(?P<amount>[\d,]+\.\d{2})\. Due date (?P<due>\d{2}-\d{2}-\d{4})'
+  date_formats: ['%d-%m-%Y']
+
+- id: airtel_bill
+  header: AIRTEL
+  kind: bill_due
+  payee: Airtel
+  regex: 'Airtel Postpaid bill of Rs\.(?P<amount>[\d,]+\.\d{2}) for (?P<account>[\d ]+) is due on (?P<due>\d{2}-[A-Za-z]{3}-\d{4})'
+  date_formats: ['%d-%b-%Y']
+
+- id: act_bill
+  header: ACTFBR
+  kind: bill_due
+  payee: ACT Fibernet
+  regex: 'ACT Fibernet bill of Rs\.(?P<amount>[\d,]+\.\d{2}) for A/c (?P<account>\w+) is due on (?P<due>\d{2}-\d{2}-\d{4})'
+  date_formats: ['%d-%m-%Y']

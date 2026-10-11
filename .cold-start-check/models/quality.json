@@ -1,0 +1,103 @@
+{
+  "generated_for": "2026-10-11",
+  "model_version": "2026.10.3+sklearn1.9.1",
+  "categorizer": {
+    "train_examples": 4140,
+    "test_examples": 1116,
+    "accuracy": 0.9167,
+    "macro_f1": 0.9153,
+    "classes": 25,
+    "train_seconds": 6.8
+  },
+  "message_classifier": {
+    "train_examples": 2107,
+    "test_examples": 1070,
+    "accuracy": 1.0,
+    "macro_f1": 1.0,
+    "per_kind_f1": {
+      "balance": 1.0,
+      "bill_due": 1.0,
+      "failed_or_reversed": 1.0,
+      "order_receipt": 1.0,
+      "other": 1.0,
+      "otp": 1.0,
+      "promo": 1.0,
+      "refund": 1.0,
+      "statement": 1.0,
+      "subscription_notice": 1.0,
+      "transaction": 1.0,
+      "usage": 1.0
+    },
+    "heldout_bank_styles_accuracy": 1.0,
+    "train_seconds": 7.2
+  },
+  "coach_intents": {
+    "train_examples": 544,
+    "intents": 13,
+    "heldout_paraphrases": 26,
+    "heldout_accuracy": 0.8462,
+    "train_seconds": 0.2
+  },
+  "parsing": {
+    "known_formats": {
+      "set": "known formats (fresh persona run)",
+      "messages": 3430,
+      "dropped_by_prefilter": {
+        "promo": 259,
+        "other": 75
+      },
+      "classified": 3096,
+      "kind_accuracy": 1.0,
+      "amount_exact": 1.0,
+      "amount_cases": 2617,
+      "direction_exact": 1.0,
+      "direction_cases": 1895,
+      "weak_templates": {}
+    },
+    "heldout_styles": {
+      "set": "held-out bank styles (Axis, Kotak)",
+      "messages": 200,
+      "dropped_by_prefilter": {},
+      "classified": 200,
+      "kind_accuracy": 1.0,
+      "amount_exact": 1.0,
+      "amount_cases": 200,
+      "direction_exact": 1.0,
+      "direction_cases": 200,
+      "weak_templates": {}
+    },
+    "challenge": {
+      "set": "challenge set (hand-written, other banks/merchants)",
+      "messages": 63,
+      "dropped_by_prefilter": {
+        "otp": 2,
+        "other": 1,
+        "promo": 1
+      },
+      "classified": 59,
+      "kind_accuracy": 0.9661,
+      "amount_exact": 1.0,
+      "amount_cases": 41,
+      "direction_exact": 1.0,
+      "direction_cases": 25,
+      "weak_templates": {}
+    }
+  },
+  "capture": {
+    "truth_transactions": 1609,
+    "captured": 1609,
+    "db_transactions": 1609,
+    "dedup_recall": 1.0,
+    "dedup_precision": 1.0,
+    "transfer_recall": 1.0,
+    "false_transfers": 0,
+    "category_accuracy": 0.998,
+    "category_misses": {
+      "Misc <- Personal Care": 2,
+      "Misc <- Shopping": 1
+    },
+    "receipts_linked_correctly": 1.0,
+    "receipts": 538,
+    "reversal_detected": 1
+  }
+}

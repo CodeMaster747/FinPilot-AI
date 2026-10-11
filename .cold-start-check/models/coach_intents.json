@@ -1,0 +1,10 @@
+{
+  "version": "2026.10.3+sklearn1.9.1",
+  "metrics": {
+    "train_examples": 544,
+    "intents": 13,
+    "heldout_paraphrases": 26,
+    "heldout_accuracy": 0.8462,
+    "train_seconds": 0.2
+  }
+}
