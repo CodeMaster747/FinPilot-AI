@@ -42,6 +42,7 @@ class Settings(BaseModel):
     job_workers: int = 2
     enable_scheduler: bool = True
     testing: bool = False
+    serpapi_api_key: str = ""
 
     @property
     def db_path(self) -> Path:
@@ -69,8 +70,33 @@ def _load_or_create_secrets(data_dir: Path) -> dict[str, str]:
     return data
 
 
+def _load_dotenv() -> None:
+    """Load simple KEY=value entries from the project .env without overriding the process environment."""
+    path = ROOT_DIR / ".env"
+    if not path.is_file():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        key, separator, value = line.partition("=")
+        if not separator or not key.strip():
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        os.environ.setdefault(key.strip(), value)
+
+
 @lru_cache
 def get_settings() -> Settings:
+    _load_dotenv()
     data_dir = Path(os.environ.get("FINPILOT_DATA_DIR", ROOT_DIR / "data")).resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     for sub in ("uploads", "models"):
@@ -85,4 +111,5 @@ def get_settings() -> Settings:
         app_timezone=os.environ.get("FINPILOT_TZ", "Asia/Kolkata"),
         enable_scheduler=os.environ.get("FINPILOT_SCHEDULER", "1") == "1",
         testing=os.environ.get("FINPILOT_TESTING") == "1",
+        serpapi_api_key=os.environ.get("SERPAPI_API_KEY", "").strip(),
     )

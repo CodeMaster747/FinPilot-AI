@@ -1,5 +1,6 @@
 # Runtime data: database, uploads, trained models, generated secret — recreated by run.py
 /data/
+/.env
 
 # Python
 /.venv/

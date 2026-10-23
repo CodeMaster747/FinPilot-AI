@@ -20,6 +20,7 @@ import {
   Repeat,
   ScanLine,
   Settings,
+  Sparkles,
   TrendingUp,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -42,6 +43,7 @@ const NAV = [
   { href: "/forecast/", label: "Forecast", icon: TrendingUp },
   { href: "/subscriptions/", label: "Subscriptions", icon: Repeat },
   { href: "/wishlist/", label: "Wishlist", icon: Heart },
+  { href: "/smart-pick/", label: "Smart Pick", icon: Sparkles },
   { href: "/insights/", label: "Insights & coach", icon: Lightbulb },
   { href: "/budgets/", label: "Budgets & goals", icon: PiggyBank },
   { href: "/tax/", label: "Tax", icon: Receipt },
