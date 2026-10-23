@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import email
+import hashlib
 import io
 import mailbox
 import re
@@ -20,8 +21,9 @@ from pathlib import Path
 
 from defusedxml.ElementTree import fromstring
 
-from app.seed.emails import html_to_text
-from app.services.ingestion.types import RawMessage
+from app.core.timeutil import local_from_epoch_ms, now_local, to_local_naive
+from app.services.ingestion.html import html_to_text
+from app.services.ingestion.types import RawMessage, sms_external_id
 
 MAX_BYTES = 25 * 1024 * 1024
 
@@ -30,14 +32,22 @@ class ImportError_(ValueError):
     pass
 
 
+def _epoch_ms(value: str | None) -> int | None:
+    value = (value or "").strip()
+    if re.fullmatch(r"\d{12,14}", value):
+        return int(value)
+    if re.fullmatch(r"\d{9,10}", value):
+        return int(value) * 1000
+    return None
+
+
 def _parse_when(value: str | None) -> datetime | None:
     if not value:
         return None
     value = value.strip()
-    if re.fullmatch(r"\d{12,14}", value):
-        return datetime.fromtimestamp(int(value) / 1000)
-    if re.fullmatch(r"\d{9,10}", value):
-        return datetime.fromtimestamp(int(value))
+    ms = _epoch_ms(value)
+    if ms is not None:
+        return local_from_epoch_ms(ms)
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M",
                 "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M", "%d %b %Y %H:%M:%S", "%d %b %Y %I:%M:%S %p", "%b %d, %Y %I:%M:%S %p",
                 "%Y-%m-%d", "%d/%m/%Y"):
@@ -46,9 +56,14 @@ def _parse_when(value: str | None) -> datetime | None:
         except ValueError:
             continue
     try:
-        return datetime.fromisoformat(value.replace("Z", "")).replace(tzinfo=None)
+        return to_local_naive(datetime.fromisoformat(value.replace("Z", "+00:00")))
     except ValueError:
         return None
+
+
+def _sms(sender: str, when: datetime | None, body: str, epoch_ms: int | None = None) -> RawMessage:
+    sender = (sender or "").strip()
+    return RawMessage("sms", sender, when or now_local(), body, external_id=sms_external_id(sender, epoch_ms, body))
 
 
 # -- SMS -------------------------------------------------------------------------------------------
@@ -61,8 +76,9 @@ def parse_sms_backup_xml(data: bytes) -> list[RawMessage]:
     for el in root.iter("sms"):
         if el.get("type") not in (None, "1"):  # inbox only; sent messages are the user's own
             continue
-        when = _parse_when(el.get("date")) or _parse_when(el.get("readable_date")) or datetime.now()
-        out.append(RawMessage("sms", el.get("address", "").strip(), when, el.get("body", "")))
+        ms = _epoch_ms(el.get("date"))
+        when = local_from_epoch_ms(ms) if ms is not None else _parse_when(el.get("readable_date"))
+        out.append(_sms(el.get("address", ""), when, el.get("body", ""), ms))
     return out
 
 
@@ -86,9 +102,9 @@ def parse_sms_csv(data: bytes) -> list[RawMessage]:
         body = (row.get(body_col) or "").strip()
         if not body:
             continue
-        when = _parse_when(row.get(date_col)) if date_col else None
-        out.append(RawMessage("sms", (row.get(sender_col) or "UNKNOWN").strip() if sender_col else "UNKNOWN",
-                              when or datetime.now(), body))
+        raw_when = row.get(date_col) if date_col else None
+        out.append(_sms((row.get(sender_col) or "UNKNOWN") if sender_col else "UNKNOWN", _parse_when(raw_when), body,
+                        _epoch_ms(raw_when)))
     return out
 
 
@@ -110,7 +126,7 @@ def parse_sms_text(text: str) -> list[RawMessage]:
             lines = lines[1:]
         body = "\n".join(lines).strip()
         if body:
-            out.append(RawMessage("sms", sender, when or datetime.now(), body))
+            out.append(_sms(sender, when, body))
     return out
 
 
@@ -131,8 +147,8 @@ def email_to_raw(msg: email.message.EmailMessage) -> RawMessage | None:
     subject = str(msg.get("Subject", "") or "")
     try:
         when = parsedate_to_datetime(msg.get("Date")) if msg.get("Date") else None
-        if when is not None and when.tzinfo is not None:
-            when = when.astimezone().replace(tzinfo=None)
+        if when is not None:
+            when = to_local_naive(when)
     except (TypeError, ValueError):
         when = None
     html = text = None
@@ -150,8 +166,10 @@ def email_to_raw(msg: email.message.EmailMessage) -> RawMessage | None:
     if not (text or "").strip():
         return None
     ext = str(msg.get("Message-ID", "") or "").strip("<> ")
-    return RawMessage("email", sender, when or datetime.now(), text or "", subject=subject, html=html,
-                      external_id=f"mid:{ext}" if ext else "")
+    if not ext:  # no Message-ID: identify the email by its content, so importing it twice doesn't duplicate it
+        ext = "h:" + hashlib.sha1(f"{sender}|{subject}|{msg.get('Date', '')}|{(text or '')[:2000]}".encode()).hexdigest()
+    return RawMessage("email", sender, when or now_local(), text or "", subject=subject, html=html,
+                      external_id=f"mid:{ext}"[:128])
 
 
 def parse_email_file(filename: str, data: bytes) -> list[RawMessage]:

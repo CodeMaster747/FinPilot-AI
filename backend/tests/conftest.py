@@ -25,13 +25,6 @@ def _db():
     with session_scope() as db:  # as at server start: every test file can run on its own
         ensure_reference_data(db)
     import app.jobs.tasks  # noqa: F401  (jobs run inline in tests)
-    from fastapi.testclient import TestClient
-
-    from app.demo_store.app import create_store_app
-    from app.services import scraper
-
-    store = create_store_app()
-    scraper.set_client_factory(lambda: TestClient(store, base_url="http://store.test"))  # crawl the demo stores in-process
 
     yield
     from app.db.session import dispose_engine
@@ -70,3 +63,25 @@ def new_user(client):
     r = client.post("/api/v1/auth/register", json={"name": "Test User", "email": email, "password": "secret123"})
     assert r.status_code == 200, r.text
     return client
+
+
+@pytest.fixture
+def phone():
+    """A client that behaves like the Android app: no cookies, Bearer tokens, cross-origin WebView requests."""
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    with TestClient(create_app()) as c:
+        c.headers.update({"Origin": "http://localhost", "X-FinPilot-Client": "android"})
+        yield c
+
+
+def sign_up_phone(phone, name: str = "Priya Raman") -> dict:
+    email = f"p{uuid.uuid4().hex[:8]}@test.dev"
+    r = phone.post("/api/v1/auth/register", json={"name": name, "email": email, "password": "secret123"})
+    assert r.status_code == 200, r.text
+    tokens = r.json()
+    phone.cookies.clear()
+    phone.headers["Authorization"] = f"Bearer {tokens['access_token']}"
+    return tokens

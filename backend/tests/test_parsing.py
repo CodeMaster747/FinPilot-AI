@@ -44,3 +44,26 @@ def test_otp_is_never_a_transaction(demo):
     assert msgs
     for m, (kind, _) in zip(msgs, classify(msgs)):
         assert kind == "otp", m.body
+
+
+
+def test_real_bank_formats_are_read_completely():
+    """Hand-written messages in the formats 25+ Indian banks, card issuers and billers send: every field a transaction
+    needs, and the two safety properties — no money message thrown away unread, no OTP ever stored."""
+    from app.ml.evaluate import score
+    from app.ml.real_corpus import messages
+
+    r = score(messages(), "real formats", verbose=True)
+    assert r["silently_dropped"] == 0 and r["otps_stored"] == 0, r.get("errors")
+    assert r["kind_accuracy"] >= 0.95, r.get("errors")
+    assert r["amount_exact"] >= 0.98 and r["direction_exact"] >= 0.98, r.get("errors")
+    assert r["mask_exact"] >= 0.95 and r["payee_found"] >= 0.9, r.get("errors")
+
+
+def test_headers_with_and_without_operator_prefix():
+    from app.services.ingestion.extract import header_of
+
+    assert header_of("VM-HDFCBK-S") == ("HDFCBK", "S")
+    assert header_of("JD-ICICIB") == ("ICICIB", None)
+    assert header_of("hdfcbk") == ("HDFCBK", None)
+    assert header_of("+919876543210") == (None, None) and header_of("567676") == (None, None)

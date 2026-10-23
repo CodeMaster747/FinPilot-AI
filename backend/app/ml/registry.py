@@ -13,7 +13,7 @@ import sklearn
 from app.core.config import get_settings
 
 # Bump when training data or features change; models with an older version are retrained.
-MODEL_VERSION = "2026.10.3"
+MODEL_VERSION = "2026.11.1"
 _cache: dict[str, Any] = {}
 _lock = threading.Lock()
 

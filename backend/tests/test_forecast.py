@@ -20,10 +20,19 @@ def test_forecast_and_backtest(demo):
     assert all(p["p10"] <= p["p50"] <= p["p90"] for p in fc["projection"])
     m = fc["metrics"]
     assert set(m) >= {"baseline", "baseline_schedule"}
-    # knowing the schedule (salary, rent, EMIs, SIPs) must beat the plain seasonal-naive baseline by a wide margin
-    assert m["baseline_schedule"]["mae"] < 0.5 * m["baseline"]["mae"]
+    # knowing the schedule (salary, rent, EMIs, SIPs) — as it was known at each origin, never the future payments
+    # themselves — must clearly beat the plain seasonal-naive baseline
+    assert m["baseline_schedule"]["mae"] < 0.75 * m["baseline"]["mae"]
     if "prophet_schedule" in m:
         assert m["prophet_schedule"]["mae"] < m["baseline"]["mae"]
+        assert m["prophet_schedule"]["end_error"] < m["baseline"]["end_error"]
+
+
+def test_short_history_gets_an_honest_note(new_user):
+    c = new_user
+    c.post("/api/v1/transactions", json={"date": "2026-10-01", "amount": 250, "direction": "debit", "merchant": "Saravana Stores"})
+    fc = c.get("/api/v1/forecast").json()
+    assert fc.get("model") == "baseline" and "you have" in (fc.get("note") or "")
 
 
 def test_what_if_shifts_every_quantile():

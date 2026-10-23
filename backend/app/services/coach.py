@@ -11,28 +11,52 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Protocol
 
-from sqlalchemy import or_, select
+from rapidfuzz import fuzz
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.money import D, fmt_inr
 from app.ml import coach_intents, registry
-from app.models import Category, DataSource, Product, Subscription, Transaction, User
+from app.models import Category, DataSource, Goal, Subscription, Transaction, User, WishlistItem
 from app.services import consent, metrics
+from app.services.affordability import affordability, evaluate_price, snapshot_projection
 from app.services.categorization import Categorizer
 from app.services.forecasting.engine import lowest_point
 from app.services.forecasting.service import latest as latest_forecast
-from app.services.picks import affordability, evaluate_price
 
 SUGGESTIONS = [
-    "How much did I spend on food delivery last month?",
-    "Can I afford a ₹60,000 laptop?",
+    "How much did I spend last month?",
+    "Can I afford a ₹20,000 phone?",
     "Which subscriptions should I cancel?",
     "What will my balance be at the end of the month?",
-    "Am I on track for my laptop goal?",
     "Which tax regime is better for me?",
-    "Recommend headphones within my budget",
+    "What can I buy from my wishlist?",
+    "Where can I save money?",
     "What data can you see?",
 ]
+
+
+def suggestions_for(db: Session, user: User, today: date | None = None) -> list[str]:
+    """Suggested questions built from the user's own data, falling back to general ones."""
+    today = today or date.today()
+    out: list[str] = []
+    last = metrics.add_months(today.replace(day=1), -1)
+    cats = metrics.by_category(metrics.rows(db, user.id, last, today.replace(day=1) - timedelta(days=1)))
+    if cats:
+        out.append(f"How much did I spend on {next(iter(cats)).lower()} last month?")
+    item = db.scalar(select(WishlistItem).where(WishlistItem.user_id == user.id, WishlistItem.active.is_(True),
+                                                WishlistItem.price.is_not(None)).order_by(WishlistItem.id.desc()).limit(1))
+    if item is not None:
+        out.append(f"Can I afford the {item.text[:40]}?")
+    goal = db.scalar(select(Goal).where(Goal.user_id == user.id, Goal.status == "active").order_by(Goal.target_date).limit(1))
+    if goal is not None:
+        out.append(f"Am I on track for my {goal.name[:40]} goal?")
+    for s in SUGGESTIONS:
+        if len(out) >= 8:
+            break
+        if s not in out and not (item is not None and s.startswith("Can I afford")):
+            out.append(s)
+    return out
 CATEGORY_WORDS = {
     "dining": "Dining Out", "eating out": "Dining Out", "restaurant": "Dining Out", "restaurants": "Dining Out", "cafe": "Dining Out",
     "food delivery": "Food Delivery", "delivery": "Food Delivery", "takeout": "Food Delivery", "food": "Food Delivery",
@@ -45,7 +69,10 @@ CATEGORY_WORDS = {
     "personal care": "Personal Care", "salon": "Personal Care", "education": "Education", "phone": "Phone & Internet",
     "internet": "Phone & Internet",
 }
+PERIOD_WORDS = set("last this next month months week weeks year years today yesterday spent spend much many total paid pay "
+                   "payments payment transactions transaction did show find search".split())
 MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
+PERIOD_WORDS |= set(MONTHS) | {m[:3] for m in MONTHS}
 STOP = set("a an the for my me i can could should afford buy under within below around about is it ok okay to spend on of with "
            "budget cheap best good find show suggest recommend what which do have enough money any deals that fits fit rs inr "
            "under lakh k thousand please some a".split())
@@ -173,23 +200,42 @@ class Coach:
 
     def fallback(self, q: str, p: float) -> Answer:
         return Answer("I can answer questions about your own money — spending by category or period, comparisons, your balance "
-                      "forecast, subscriptions, tax, goals, finding transactions, whether you can afford something, product picks "
+                      "forecast, subscriptions, tax, goals, finding transactions, whether you can afford something, your wishlist "
                       "and what data I can see. Try one of the suggestions below.", "fallback", p,
                       links=[{"label": s, "ask": s} for s in SUGGESTIONS[:4]])
 
     def _rows(self, start: date, end: date) -> list[metrics.Row]:
         return metrics.rows(self.db, self.user.id, start, end)
 
+    def _merchant(self, q: str) -> str | None:
+        """A merchant named in the question: the curated alias list first, then the user's own payees."""
+        alias = self.cat.match_alias(q)
+        if alias:
+            return alias.name
+        words = [w for w in keywords(q) if len(w) > 3 and w not in PERIOD_WORDS]
+        if not words:
+            return None
+        names = self.db.scalars(select(Transaction.merchant_name).where(Transaction.user_id == self.user.id).distinct()).all()
+        best: tuple[int, str] | None = None
+        for name in names:
+            low = (name or "").lower()
+            if not low:
+                continue
+            score = max(fuzz.partial_ratio(w, low) for w in words)
+            if score >= 90 and (best is None or score > best[0] or (score == best[0] and len(name) < len(best[1]))):
+                best = (score, name)
+        return best[1] if best else None
+
     def spend_by_category(self, q: str) -> Answer:
         start, end, label = parse_period(q, self.today)
         cat = parse_category(q)
-        merchant = self.cat.match_alias(q)
+        merchant = None if cat else self._merchant(q)
         rs = self._rows(start, end)
         if merchant and not cat:
-            sel = [r for r in rs if r.merchant == merchant.name and r.amount < 0]
+            sel = [r for r in rs if r.merchant == merchant and r.amount < 0]
             total = -sum((r.amount for r in sel), Decimal(0))
-            return Answer(f"You spent {fmt_inr(total)} at {merchant.name} in {label} across {len(sel)} payment(s).", "", 0,
-                          slots={"merchant": merchant.name, "period": label})
+            return Answer(f"You spent {fmt_inr(total)} at {merchant} in {label} across {len(sel)} payment(s).", "", 0,
+                          slots={"merchant": merchant, "period": label})
         if cat:
             sel = [r for r in rs if r.category == cat and r.kind == "expense"]
             total = -sum((r.amount for r in sel), Decimal(0))
@@ -267,7 +313,7 @@ class Coach:
             ideas.append((float(delivery) * 0.3 * 12, f"Food delivery averages {fmt_inr(delivery)}/month — cooking two more meals a week could save ~{fmt_inr(delivery * Decimal('0.3'))}/month."))
         ideas.sort(key=lambda x: -x[0])
         if not ideas:
-            return Answer("You're already doing well — no obvious leaks right now. Keep your SIPs going.", "", 0)
+            return Answer("Nothing stands out as a leak right now — no idle subscriptions, and your budgets are on pace.", "", 0)
         text = "Here's where you could save the most:\n" + "\n".join(f"• {t}" for _, t in ideas[:4])
         return Answer(text, "", 0, links=[{"label": "Subscriptions", "href": "/subscriptions"}, {"label": "Budgets", "href": "/budgets"}])
 
@@ -319,14 +365,14 @@ class Coach:
     def transaction_search(self, q: str) -> Answer:
         start, end, label = parse_period(q, self.today)
         explicit_period = label != "this month" or "this month" in q.lower()
-        merchant = self.cat.match_alias(q)
         cat = parse_category(q)
+        merchant = None if cat else self._merchant(q)
         amount = parse_amount(q)
         stmt = select(Transaction).where(Transaction.user_id == self.user.id, Transaction.is_transfer.is_(False))
         desc = []
         if merchant:
-            stmt = stmt.where(Transaction.merchant_name == merchant.name)
-            desc.append(merchant.name)
+            stmt = stmt.where(Transaction.merchant_name == merchant)
+            desc.append(merchant)
         elif cat:
             cid = self.cat.by_name[cat].id
             stmt = stmt.where(Transaction.category_id == cid)
@@ -346,35 +392,41 @@ class Coach:
                                             "direction": t.direction} for t in rows],
                       links=[{"label": "Open transactions", "href": "/transactions"}])
 
-    def _find_products(self, q: str, limit: int = 5) -> list[Product]:
-        words = keywords(q)
+    def _find_wishlist(self, q: str) -> WishlistItem | None:
+        words = [w for w in keywords(q) if len(w) > 2]
         if not words:
-            return []
-        conds = [Product.title.ilike(f"%{w}%") for w in words if len(w) > 3]
-        if not conds:
-            return []
-        return list(self.db.scalars(select(Product).where(Product.stale.is_(False), or_(*conds)).order_by(Product.rating.desc()).limit(40)).all())[:limit * 4]
+            return None
+        items = self.db.scalars(select(WishlistItem).where(WishlistItem.user_id == self.user.id, WishlistItem.active.is_(True))).all()
+        scored = [(sum(1 for w in words if w in it.text.lower()), it) for it in items]
+        scored = [x for x in scored if x[0] > 0]
+        return max(scored, key=lambda x: x[0])[1] if scored else None
 
     def affordability_check(self, q: str) -> Answer:
-        snap = affordability(self.db, self.user, self.today, for_picks=False)
-        fc = latest_forecast(self.db, self.user.id)
-        proj = fc.payload["projection"] if fc else None
+        snap = affordability(self.db, self.user, self.today)
+        proj = snapshot_projection(self.db, self.user, snap)
         amount = parse_amount(q)
-        product = None
+        item = None
         if amount is None:
-            prods = self._find_products(q, 1)
-            product = prods[0] if prods else None
-            amount = product.price if product else None
+            item = self._find_wishlist(q)
+            amount = item.price if item is not None else None
         if amount is None:
-            return Answer(f"Tell me a price and I'll check it — right now you can safely spend about {fmt_inr(min(snap.safe_to_spend, snap.wants_left))} "
-                          "this month without touching bills, goals or your safety buffer.", "", 0)
+            hint = (f" ({item.text} has no price yet — add one on the Wishlist page.)" if item is not None else "")
+            return Answer(f"Tell me a price and I'll check it — right now you can safely spend about {fmt_inr(snap.spendable)} "
+                          f"this month without touching bills, goals or your safety buffer.{hint}", "", 0)
         v = evaluate_price(amount, snap, proj)
-        what = product.title if product else f"something for {fmt_inr(amount)}"
+        what = item.text if item is not None else f"something for {fmt_inr(amount)}"
         if v["tier"] == "buy_now":
-            text = f"Yes — {what} fits. It's within your safe-to-spend ({fmt_inr(snap.safe_to_spend)}) and this month's wants budget ({fmt_inr(snap.wants_left)} left)."
+            text = (f"Yes — {what} fits. It's within your safe-to-spend ({fmt_inr(snap.safe_to_spend)}) and this month's wants budget "
+                    f"({fmt_inr(snap.wants_left)} left)." if snap.wants_known else
+                    f"Yes — {what} fits within your safe-to-spend ({fmt_inr(snap.safe_to_spend)}), after bills, goals and your buffer.")
+            if not snap.balance_known:
+                text += " I checked it against your budget only, because your account balance isn't known yet."
         elif v["tier"] == "save_up":
             text = (f"Not today without stretching. If you save {fmt_inr(D(v['monthly']))}/month for {v['months']} month(s), you can buy "
                     f"{what} without touching your {fmt_inr(snap.buffer)} buffer or your goals.")
+        elif snap.income <= 0:
+            text = (f"I can't judge {what} yet — I don't know your income. Add your take-home pay in Settings, or connect your bank SMS "
+                    "so salary credits are seen.")
         else:
             text = f"I'd hold off on {what} — it would cut into money set aside for bills, goals or your safety buffer."
         if v["impact"]:
@@ -384,37 +436,34 @@ class Coach:
                       chart={"type": "line", "title": "Projected balance if you buy it today",
                              "data": [{"label": x["date"][5:], "value": x["p50"] - float(amount), "low": x["p10"] - float(amount),
                                        "high": x["p90"] - float(amount)} for x in proj[:60]]} if proj else None,
-                      links=[{"label": "Open Smart Picks", "href": "/picks"}])
+                      links=[{"label": "Open wishlist", "href": "/wishlist"}])
 
     def recommendation_query(self, q: str) -> Answer:
-        snap = affordability(self.db, self.user, self.today, for_picks=False)
-        fc = latest_forecast(self.db, self.user.id)
-        proj = fc.payload["projection"] if fc else None
+        from app.services.wishlist import evaluate as evaluate_wishlist
+
+        wl = evaluate_wishlist(self.db, self.user, self.today)
+        items = [i for i in wl["items"] if i["price"] is not None]
         cap = parse_amount(q)
-        prods = self._find_products(q, 8)
-        if not prods:
-            return Answer("Your Smart Picks page has products matched to your wishlist, goals and regular purchases — each checked "
-                          "against your budget.", "", 0, links=[{"label": "Open Smart Picks", "href": "/picks"}])
-        rows = []
-        for p in prods:
-            if cap and p.price > cap:
-                continue
-            v = evaluate_price(p.price, snap, proj)
-            if v["tier"] == "not_now":
-                continue
-            rows.append((0 if v["tier"] == "buy_now" else 1, -p.rating, p, v))
-        rows.sort(key=lambda x: (x[0], x[1]))
-        if not rows:
-            return Answer("Nothing in the stores fits that budget right now without touching your buffer.", "", 0)
-        top = rows[:3]
-
-        def verdict(v: dict) -> str:
-            return "buy now" if v["tier"] == "buy_now" else "save for {} month(s)".format(v["months"])
-
-        text = "Here's what fits: " + "; ".join(f"{p.title} at {fmt_inr(p.price)} ({verdict(v)})" for _, _, p, v in top) + "."
-        return Answer(text, "", 0, table=[{"product": p.title, "price": float(p.price), "rating": p.rating,
-                                            "verdict": "Buy now" if v["tier"] == "buy_now" else f"Save {v['months']} mo"} for _, _, p, v in top],
-                      links=[{"label": "Open Smart Picks", "href": "/picks"}])
+        if cap:
+            items = [i for i in items if i["price"] <= float(cap)]
+        if not items:
+            return Answer("Your wishlist is empty (or has no prices yet). Add what you want on the Wishlist page — a name and price, or a "
+                          "product link — and I'll tell you which ones fit your budget.", "", 0,
+                          links=[{"label": "Open wishlist", "href": "/wishlist"}])
+        now = [i for i in items if i["tier"] == "buy_now"]
+        later = [i for i in items if i["tier"] in ("goal", "save_up")]
+        parts = []
+        if now:
+            parts.append("You can buy now: " + ", ".join(f"{i['text']} ({fmt_inr(D(i['price']))})" for i in now[:3]))
+        if later:
+            parts.append("Save up for: " + ", ".join(f"{i['text']} — {fmt_inr(D(i['monthly'] or 0))}/month for {i['months']} month(s)"
+                                                     if i["tier"] == "save_up" else f"{i['text']} (your goal)" for i in later[:3]))
+        if not parts:
+            parts.append("Nothing on your wishlist fits right now without touching your buffer, bills or goals")
+        label = {"buy_now": "Buy now", "goal": "Goal", "save_up": "Save up", "not_now": "Not now"}
+        return Answer(". ".join(parts) + ".", "", 0,
+                      table=[{"item": i["text"], "price": i["price"], "verdict": label.get(i["tier"], i["tier"])} for i in items[:8]],
+                      links=[{"label": "Open wishlist", "href": "/wishlist"}])
 
     def privacy_query(self, q: str) -> Answer:
         parts = []
@@ -424,8 +473,7 @@ class Coach:
             if src is None:
                 parts.append(f"{title}: not connected")
             else:
-                uses = " and Smart Picks" if "picks" in (src.purposes or []) else ""
-                parts.append(f"{title}: {src.status} — used for transactions{uses}")
+                parts.append(f"{title}: {src.status} — used to record your transactions")
         text = ("I only read sources you've explicitly connected. " + "; ".join(parts) + ". Personal chats, OTPs, promotional "
                 "messages and non-financial email are never stored. Original message text is encrypted and deleted after "
                 f"{(self.user.preferences or {}).get('retention_days', 90)} days; you can pause, revoke or delete each source's data any time.")
@@ -438,14 +486,14 @@ class Coach:
         rate = float((inc - out) / inc * 100) if inc else 0.0
         cats = metrics.by_category(rs)
         top = next(iter(cats.items()), None)
-        snap = affordability(self.db, self.user, self.today, for_picks=False)
+        snap = affordability(self.db, self.user, self.today)
         when = "So far this month" if label == "this month" else f"In {label}"
         if inc:
             text = f"{when}: income {fmt_inr(inc)}, spending {fmt_inr(out)}, invested {fmt_inr(inv)} — you kept {rate:.0f}% of your income."
         else:
             text = f"{when}: spending {fmt_inr(out)} and {fmt_inr(inv)} invested; no income has been credited yet in this period."
         text += ((f" Your biggest category was {top[0]} ({fmt_inr(top[1])})." if top else "")
-                + f" Safe to spend right now: {fmt_inr(min(snap.safe_to_spend, snap.wants_left))}.")
+                + f" Safe to spend right now: {fmt_inr(snap.spendable)}.")
         return Answer(text, "", 0, chart={"type": "bar", "title": label,
                                            "data": [{"label": "Income", "value": float(inc)}, {"label": "Spending", "value": float(out)},
                                                     {"label": "Invested", "value": float(inv)}]})

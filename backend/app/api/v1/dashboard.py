@@ -12,15 +12,15 @@ from sqlalchemy import delete, select
 
 from app.core.deps import DB, CurrentUser
 from app.jobs.runner import runner
-from app.models import Anomaly, ChatMessage, Insight, Job, Product, ProductRecommendation, Transaction, UpcomingPayment
+from app.models import Anomaly, ChatMessage, Insight, Job, Transaction, UpcomingPayment
 from app.schemas.common import iso, num
 from app.schemas.serialize import Lookups, txn_out
 from app.services import consent, metrics
 from app.services.accounts import account_balances
-from app.services.coach import SUGGESTIONS, Coach
+from app.services.affordability import affordability
+from app.services.coach import Coach, suggestions_for
 from app.services.forecasting.engine import lowest_point
 from app.services.forecasting.service import latest as latest_forecast
-from app.services.picks import affordability
 
 router = APIRouter(tags=["dashboard"])
 
@@ -33,8 +33,11 @@ class StatusBody(BaseModel):
     status: str = Field(pattern="^(open|dismissed|confirmed)$")
 
 
+ANALYTICS_KINDS = ("user_analytics", "ingest_sample", "ingest_file", "ingest_device", "imap_sync", "bootstrap_demo")
+
+
 def _analytics_running(db, user_id: int) -> bool:  # noqa: ANN001
-    return db.scalar(select(Job.id).where(Job.user_id == user_id, Job.kind.in_(("user_analytics", "ingest_sample", "ingest_file")),
+    return db.scalar(select(Job.id).where(Job.user_id == user_id, Job.kind.in_(ANALYTICS_KINDS),
                                           Job.status.in_(("queued", "running"))).limit(1)) is not None
 
 
@@ -60,20 +63,27 @@ def dashboard(db: DB, user: CurrentUser) -> dict[str, Any]:
     month = metrics.month_summary(db, user.id, today)
     last = metrics.month_summary(db, user.id, metrics.add_months(today.replace(day=1), -1))
     balances = account_balances(db, user.id)
-    liquid = sum((b["balance"] for b in balances), Decimal(0))
+    liquid = sum((b["balance"] for b in balances if b["known"] or b["account"].kind == "credit_card"), Decimal(0))
+    balance_known = any(b["known"] and b["account"].kind != "credit_card" for b in balances)
     fc = latest_forecast(db, user.id)
+    running = _analytics_running(db, user.id)
+    if fc is None and not running:
+        # a new account (or one whose analytics never ran): compute them now instead of waiting for the nightly run
+        runner.enqueue("user_analytics", user_id=user.id, db=db)
+        running = True
     cats = metrics.by_category(metrics.rows(db, user.id, today.replace(day=1), today))
     cat_items = list(cats.items())
     top = [{"category": k, "amount": num(v)} for k, v in cat_items[:7]]
     if len(cat_items) > 7:
         top.append({"category": "Other", "amount": num(sum((v for _, v in cat_items[7:]), Decimal(0)))})
-    snap = affordability(db, user, for_picks=False) if fc is not None else None
+    snap = affordability(db, user) if fc is not None else None
     upcoming: list[dict[str, Any]] = []
     if fc is not None:
         horizon = (today + timedelta(days=14)).isoformat()
         upcoming = [e for e in fc.payload.get("events", []) if e["date"] <= horizon][:10]
-    picks = db.execute(select(ProductRecommendation, Product).join(Product).where(
-        ProductRecommendation.user_id == user.id, ProductRecommendation.status.in_(("new", "saved"))).order_by(ProductRecommendation.id).limit(3)).all()
+    from app.services.wishlist import evaluate as evaluate_wishlist
+
+    wishlist = evaluate_wishlist(db, user, today)["items"][:3] if fc is not None else []
     insights = db.scalars(select(Insight).where(Insight.user_id == user.id, Insight.dismissed.is_(False)).order_by(Insight.severity.desc()).limit(5)).all()
     sources = []
     for kind in consent.KINDS:
@@ -83,16 +93,24 @@ def dashboard(db: DB, user: CurrentUser) -> dict[str, Any]:
     proj = fc.payload["projection"] if fc else []
     low = lowest_point(proj, 30) if proj else (None, None)
     return {
-        "preparing": _analytics_running(db, user.id) or fc is None,
+        "preparing": running or fc is None,
+        "has_data": db.scalar(select(Transaction.id).where(Transaction.user_id == user.id).limit(1)) is not None,
+        "months_of_data": metrics.complete_months(db, user.id, today),
         "kpis": {
-            "balance": num(liquid), "income_month": num(month["income"]), "spend_month": num(month["spend"]),
+            "balance": num(liquid) if balance_known else None,
+            "balance_known": balance_known, "income_month": num(month["income"]), "spend_month": num(month["spend"]),
             "spend_last_month": num(last["spend"]), "savings_rate_last_month": last["savings_rate"],
-            "safe_to_spend": num(min(snap.safe_to_spend, snap.wants_left)) if snap else None,
-            "safe_to_spend_total": num(snap.safe_to_spend) if snap else None, "wants_left": num(snap.wants_left) if snap else None,
+            # balance: from account balances (capped by the wants budget when income is known); wants: no balance yet, so
+            # only the monthly wants budget; none: neither a balance nor an income to work from
+            "safe_basis": None if snap is None else "balance" if snap.balance_known else "wants" if snap.wants_known else "none",
+            "safe_to_spend": num(snap.spendable) if snap and (snap.balance_known or snap.wants_known) else None,
+            "safe_to_spend_total": num(snap.safe_to_spend) if snap else None,
+            "wants_left": num(snap.wants_left) if snap and snap.wants_known else None, "buffer": num(snap.buffer) if snap else None,
             "net_next_30": fc.payload.get("net_next_30") if fc else None,
             "lowest_30": {"amount": low[0], "date": low[1]} if fc else None,
         },
-        "accounts": [{"name": b["account"].name, "kind": b["account"].kind, "balance": num(b["balance"])} for b in balances],
+        "accounts": [{"id": b["account"].id, "name": b["account"].name, "kind": b["account"].kind,
+                      "balance": num(b["balance"]) if b["known"] else None, "balance_source": b["source"]} for b in balances],
         "cashflow": [{**m, "income": num(m["income"]), "spend": num(m["spend"]), "invested": num(m["invested"])}
                      for m in metrics.monthly_series(db, user.id, 12, today)],
         "balance": {"history": fc.payload["history"][-90:] if fc else [], "projection": proj[:60]},
@@ -100,8 +118,8 @@ def dashboard(db: DB, user: CurrentUser) -> dict[str, Any]:
         "anomalies": anomalies_grouped(db, user.id, limit=4),
         "insights": [{"id": i.id, "kind": i.kind, "severity": i.severity, "title": i.title, "body": i.body, "link": i.link} for i in insights],
         "upcoming": upcoming,
-        "picks": [{"id": r.id, "tier": r.tier, "title": p.title, "price": num(p.price), "reason": r.reasons[0] if r.reasons else ""}
-                  for r, p in picks],
+        "wishlist": [{"id": w["id"], "tier": w["tier"], "title": w["text"], "price": w["price"],
+                      "reason": w["reasons"][0] if w["reasons"] else ""} for w in wishlist],
         "sources": sources,
         "budgets": [{**b, "budget": num(b["budget"]), "spent": num(b["spent"])} for b in metrics.budgets_status(db, user.id, today)[:4]],
     }
@@ -140,8 +158,8 @@ def set_anomaly(txn_id: int, body: StatusBody, db: DB, user: CurrentUser) -> dic
 
 
 @router.get("/coach/suggestions")
-def coach_suggestions() -> list[str]:
-    return SUGGESTIONS
+def coach_suggestions(db: DB, user: CurrentUser) -> list[str]:
+    return suggestions_for(db, user)
 
 
 @router.get("/coach/history")

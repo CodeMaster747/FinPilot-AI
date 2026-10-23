@@ -1,4 +1,4 @@
-"""Recurring work: crawl the demo stores, refresh nightly analytics, purge expired raw messages."""
+"""Recurring work: sync connected mailboxes, re-check wishlist prices, refresh nightly analytics, purge expired raw text."""
 
 from __future__ import annotations
 
@@ -25,7 +25,8 @@ class Task:
 
 
 TASKS = [
-    Task("crawl_all", timedelta(hours=6), {"trigger": "schedule"}),
+    Task("imap_sync_all", timedelta(minutes=30)),
+    Task("wishlist_prices", timedelta(hours=24)),
     Task("nightly_all_users", timedelta(hours=24)),
     Task("retention_purge", timedelta(hours=24)),
 ]
@@ -47,7 +48,7 @@ class Scheduler:
         self._stop.set()
 
     def _loop(self) -> None:
-        # Startup already runs bootstrap/crawl/analytics; give it time before checking schedules.
+        # Startup already runs the demo bootstrap and warm-up; give it time before checking schedules.
         if self._stop.wait(self.grace):
             return
         while not self._stop.is_set():

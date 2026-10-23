@@ -1,5 +1,6 @@
-"""Demo bootstrap: a seeded persona whose 24 months of data end *today*, ingested through the real
-consent-gated pipeline. Runs on first start and again automatically whenever the data goes stale."""
+"""The demo account: a seeded persona (Aarav Sharma) whose 24 months of messages end *today*, ingested through the
+real consent-gated pipeline. It exists for presentations, is labelled as sample data everywhere, and can't connect
+real sources. Real accounts never see any of this data. Rebuilt on first start and whenever it goes stale."""
 
 from __future__ import annotations
 
@@ -10,58 +11,60 @@ from typing import Any
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.core.security import hash_password
 from app.db.session import session_scope
+from app.ml.text import normalize
 from app.ml.train import ensure_models
-from app.models import Budget, Category, CategoryRule, Goal, User, WishlistItem
+from app.models import Budget, Category, CategoryRule, Goal, Merchant, MerchantAlias, User, WishlistItem, WishlistPricePoint
 from app.seed import demo_profile
+from app.seed.reference import PERSONA_MERCHANTS
 from app.services import consent
+from app.services.metrics import months_ago
 from app.services.reference_data import ensure_reference_data
+from app.services.users import create_user
 
 log = logging.getLogger("finpilot.demo")
 
 
-def create_user(db, email: str, name: str, password: str, is_demo: bool = False) -> User:  # noqa: ANN001
-    user = User(email=email.lower().strip(), name=name.strip(), password_hash=hash_password(password), is_demo=is_demo,
-                preferences=dict(demo_profile.PREFERENCES) | {"picks_enabled": is_demo})
-    db.add(user)
-    db.flush()
-    return user
+def _persona_merchants(db, user: User, cats: dict[str, Category]) -> None:  # noqa: ANN001
+    """The persona's employer and loan are the demo account's own merchants, never global ones."""
+    for spec in PERSONA_MERCHANTS:
+        merchant = db.scalar(select(Merchant).where(Merchant.user_id.is_(None), Merchant.name == spec.name))
+        if merchant is None:
+            merchant = Merchant(user_id=user.id, name=spec.name, category_id=cats[spec.category].id)
+            db.add(merchant)
+            db.flush()
+        for pattern in {normalize(a) for a in (*spec.aliases, spec.name)}:
+            db.add(MerchantAlias(user_id=user.id, pattern=pattern, merchant_id=merchant.id, source="seed"))
 
 
 def _personalise(db, user: User, today: date) -> None:  # noqa: ANN001
     cats = {c.name: c for c in db.scalars(select(Category).where(Category.user_id.is_(None))).all()}
+    _persona_merchants(db, user, cats)
     for name, amount in demo_profile.BUDGETS.items():
         db.add(Budget(user_id=user.id, category_id=cats[name].id, amount=amount))
     for g in demo_profile.goals(today):
         db.add(Goal(user_id=user.id, **g))
     for w in demo_profile.WISHLIST:
-        db.add(WishlistItem(user_id=user.id, **w))
+        item = WishlistItem(user_id=user.id, text=w["text"], max_price=w["max_price"], price=w["price"], price_source="manual")
+        db.add(item)
+        db.flush()
+        db.add(WishlistPricePoint(item_id=item.id, price=w["price"], observed_on=today, source="manual"))
     for value, cat in demo_profile.RULES:
         db.add(CategoryRule(user_id=user.id, match_field="merchant", op="contains", value=value, category_id=cats[cat].id))
     user.tax_profile = dict(demo_profile.TAX_PROFILE)
     user.onboarded = True
 
 
-def months_ago(d: date, months: int) -> date:
-    y, m = divmod(d.year * 12 + d.month - 1 - months, 12)
-    m += 1
-    for day in (d.day, 30, 29, 28):
-        try:
-            return date(y, m, day)
-        except ValueError:
-            continue
-    return date(y, m, 28)
-
-
 def load_sample(db, user: User, kind: str, today: date | None = None, cutoff: datetime | None = None,
                 progress=None) -> dict[str, Any]:  # noqa: ANN001
-    """Run the persona's sample inbox (kind='sms') or mailbox (kind='email') through the pipeline."""
+    """Run the persona's inbox (kind='sms') or mailbox (kind='email') through the pipeline. Demo account only."""
     from app.seed.emails import render_emails
     from app.seed.persona import build_persona
     from app.seed.sms import render_sms
     from app.services.ingestion.pipeline import ingest
 
+    if not user.is_demo:
+        raise ValueError("Sample messages can only be loaded into the demo account.")
     source = consent.require_active(db, user, kind)
     today = today or date.today()
     persona = build_persona(today, cutoff=cutoff or datetime.now())
@@ -88,10 +91,11 @@ def ensure_demo(force: bool = False, progress=None) -> dict[str, Any]:  # noqa: 
             step(5, "Refreshing demo data to today")
             db.delete(demo)
             db.flush()
-        demo = create_user(db, settings.demo_email, settings.demo_name, settings.demo_password, is_demo=True)
+        demo = create_user(db, settings.demo_email, settings.demo_name, settings.demo_password, is_demo=True,
+                           preferences=dict(demo_profile.PREFERENCES))
         _personalise(db, demo, today)
         for kind in ("sms", "email"):
-            consent.grant(db, demo, kind, ["transactions", "picks"], 24)
+            consent.grant(db, demo, kind, ["transactions"], 24)
         user_id = demo.id
     cutoff = datetime.now()
     results = {}
@@ -101,15 +105,6 @@ def ensure_demo(force: bool = False, progress=None) -> dict[str, Any]:  # noqa: 
             base = 10 + i * 40
             results[kind] = load_sample(db, demo, kind, today, cutoff,
                                         progress=lambda f, b=base, k=kind: step(b + f * 40, f"Reading sample {k.upper()}"))
-    step(92, "Preparing sample receipts")
-    from app.seed.persona import build_persona
-    from app.seed.receipt_images import generate_samples
-
-    from app.seed.import_samples import write_samples
-
-    persona = build_persona(today, cutoff=cutoff)
-    generate_samples(persona, get_settings().data_dir / "samples" / "receipts")
-    write_samples(persona, get_settings().data_dir / "samples" / "imports")
     with session_scope() as db:
         u = db.get(User, user_id)
         u.data_end_date = today
@@ -118,7 +113,6 @@ def ensure_demo(force: bool = False, progress=None) -> dict[str, Any]:  # noqa: 
     from app.jobs.runner import runner
 
     runner.enqueue("user_analytics", user_id=user_id)
-    runner.enqueue("crawl_all", params={"trigger": "bootstrap"})
     runner.enqueue("quality_report", user_id=user_id)
     log.info("demo ready: %s", results)
     return {"status": "created", "user_id": user_id, **results}

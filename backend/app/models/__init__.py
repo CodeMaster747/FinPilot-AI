@@ -1,6 +1,6 @@
 """All ORM models, imported here so Alembic and the app see a single metadata."""
 
-from app.models.capture import BalanceSnapshot, ConsentEvent, DataSource, IngestedMessage, UpcomingPayment
+from app.models.capture import BalanceSnapshot, ConsentEvent, DataSource, IngestedMessage, MailboxConnection, UpcomingPayment
 from app.models.core import Job, ModelArtifact, RefreshToken, User
 from app.models.finance import (
     Account,
@@ -21,19 +21,10 @@ from app.models.finance import (
     Transaction,
     TransactionItem,
 )
-from app.models.picks import (
-    AffordabilitySnapshot,
-    CrawlRun,
-    Product,
-    ProductPriceHistory,
-    ProductRecommendation,
-    ProductSource,
-    WishlistItem,
-)
+from app.models.wishlist import WishlistItem, WishlistPricePoint
 
 __all__ = [
     "Account",
-    "AffordabilitySnapshot",
     "Anomaly",
     "BalanceSnapshot",
     "Budget",
@@ -41,22 +32,18 @@ __all__ = [
     "CategoryRule",
     "ChatMessage",
     "ConsentEvent",
-    "CrawlRun",
     "DataSource",
     "Forecast",
     "ForecastMetric",
     "Goal",
     "ImportBatch",
     "IngestedMessage",
+    "MailboxConnection",
     "Insight",
     "Job",
     "Merchant",
     "MerchantAlias",
     "ModelArtifact",
-    "Product",
-    "ProductPriceHistory",
-    "ProductRecommendation",
-    "ProductSource",
     "Receipt",
     "RefreshToken",
     "Subscription",
@@ -65,4 +52,5 @@ __all__ = [
     "UpcomingPayment",
     "User",
     "WishlistItem",
+    "WishlistPricePoint",
 ]

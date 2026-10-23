@@ -1,7 +1,12 @@
-// Thin fetch wrapper for the same-origin FastAPI backend.
-// - cookies carry the session (httpOnly), so no tokens live in JS
-// - every mutating request sends X-Requested-With (the backend's CSRF guard)
-// - a 401 triggers one silent refresh, then a redirect to /login
+// Fetch wrapper for the FinPilot API.
+// - In a browser the UI is served by the FinPilot server itself: same origin, httpOnly session cookies, and every
+//   request carries X-Requested-With (the server's CSRF guard).
+// - In the Android app the UI is bundled in the APK and talks to the server on your laptop: an absolute URL, Bearer
+//   tokens kept in app storage, and X-FinPilot-Client: android.
+// - A 401 triggers one silent refresh; if that fails the app signs out (router navigation, never a page reload).
+// - "Can't reach the server" is reported as such, not as "signed out".
+
+import { accessToken, clearTokens, isNative, loadNativeState, refreshToken, serverUrl, setTokens } from "@/lib/platform";
 
 export class ApiError extends Error {
   status: number;
@@ -13,13 +18,20 @@ export class ApiError extends Error {
   }
 }
 
-type Options = Omit<RequestInit, "body"> & { body?: unknown; params?: Record<string, unknown>; noRedirect?: boolean };
+type Options = Omit<RequestInit, "body"> & { body?: unknown; params?: Record<string, unknown>; noRedirect?: boolean; timeoutMs?: number };
+type Tokens = { access_token: string; refresh_token: string; expires_in?: number };
 
-const BASE = "/api/v1";
+const PREFIX = "/api/v1";
+const DEFAULT_TIMEOUT = 30_000;
 let refreshing: Promise<boolean> | null = null;
 
-function buildUrl(path: string, params?: Record<string, unknown>) {
-  const url = new URL(BASE + path, window.location.origin);
+/** Fired when the session can't be renewed; the app shell sends the user to the sign-in page. */
+export const authEvents = typeof window !== "undefined" ? new EventTarget() : null;
+
+export function apiUrl(path: string, params?: Record<string, unknown>): string {
+  const base = isNative() ? serverUrl() : window.location.origin;
+  if (!base) throw new ApiError(0, "Connect the app to your FinPilot server first.", { code: "no_server" });
+  const url = new URL(PREFIX + path, base);
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v === undefined || v === null || v === "") continue;
@@ -29,45 +41,85 @@ function buildUrl(path: string, params?: Record<string, unknown>) {
   return url.toString();
 }
 
+function authHeaders(): Record<string, string> {
+  if (!isNative()) return { "X-Requested-With": "finpilot" };
+  const token = accessToken();
+  return { "X-FinPilot-Client": "android", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+}
+
+function unreachable(): ApiError {
+  const where = isNative() ? serverUrl() : null;
+  return new ApiError(0, where
+    ? `Can't reach your FinPilot server at ${where}. Make sure python3 run.py is running on your laptop and that the phone can reach it (same Wi-Fi or hotspot, or the --tunnel address).`
+    : "Can't reach the FinPilot server. Check that python3 run.py is still running.", { code: "unreachable" });
+}
+
+async function send(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch {
+    throw unreachable();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function refreshSession(): Promise<boolean> {
   if (!refreshing) {
-    refreshing = fetch(BASE + "/auth/refresh", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "X-Requested-With": "finpilot" },
-    })
-      .then((r) => r.ok)
-      .catch(() => false)
-      .finally(() => {
-        setTimeout(() => (refreshing = null), 0);
-      });
+    refreshing = (async () => {
+      try {
+        if (isNative()) {
+          const token = refreshToken();
+          if (!token) return false;
+          const res = await send(apiUrl("/auth/refresh"), {
+            method: "POST", credentials: "omit",
+            headers: { "X-FinPilot-Client": "android", "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh_token: token }),
+          }, DEFAULT_TIMEOUT);
+          if (!res.ok) return false;
+          await setTokens((await res.json()) as Tokens);
+          return true;
+        }
+        const res = await send(apiUrl("/auth/refresh"), { method: "POST", credentials: "same-origin", headers: authHeaders() }, DEFAULT_TIMEOUT);
+        return res.ok;
+      } catch {
+        return false;
+      }
+    })().finally(() => {
+      setTimeout(() => (refreshing = null), 0);
+    });
   }
   return refreshing;
 }
 
-export async function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
-  const { body, params, noRedirect, headers, ...rest } = opts;
+/** A raw authenticated request (downloads, images): refreshes once on 401 and returns the Response. */
+export async function apiFetch(path: string, opts: Options = {}): Promise<Response> {
+  await loadNativeState();
+  const { body, params, headers, timeoutMs, noRedirect, ...rest } = opts;
   const isForm = typeof FormData !== "undefined" && body instanceof FormData;
-  const init: RequestInit = {
-    credentials: "same-origin",
+  const build = (): RequestInit => ({
+    credentials: isNative() ? "omit" : "same-origin",
     ...rest,
-    headers: {
-      "X-Requested-With": "finpilot",
-      ...(body !== undefined && !isForm ? { "Content-Type": "application/json" } : {}),
-      ...(headers || {}),
-    },
+    headers: { ...authHeaders(), ...(body !== undefined && !isForm ? { "Content-Type": "application/json" } : {}), ...(headers || {}) },
     body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
-  };
-  let res = await fetch(buildUrl(path, params), init);
+  });
+  const url = apiUrl(path, params);
+  let res = await send(url, build(), timeoutMs ?? (isForm ? 120_000 : DEFAULT_TIMEOUT));
   if (res.status === 401 && !path.startsWith("/auth/")) {
-    if (await refreshSession()) res = await fetch(buildUrl(path, params), init);
+    if (await refreshSession()) res = await send(url, build(), timeoutMs ?? DEFAULT_TIMEOUT);
   }
   if (res.status === 401 && !noRedirect && !path.startsWith("/auth/")) {
-    // A full page load (not the router) on purpose: it also drops every cached query of the old session.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    if (!window.location.pathname.startsWith("/login")) window.location.href = "/login/";
+    await clearTokens();
+    authEvents?.dispatchEvent(new Event("signed-out"));
     throw new ApiError(401, "Not signed in");
   }
+  return res;
+}
+
+export async function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
+  const res = await apiFetch(path, opts);
   const text = await res.text();
   const data = text ? safeJson(text) : null;
   if (!res.ok) {
@@ -91,3 +143,18 @@ export const post = <T,>(path: string, body?: unknown) => api<T>(path, { method:
 export const put = <T,>(path: string, body?: unknown) => api<T>(path, { method: "PUT", body });
 export const patch = <T,>(path: string, body?: unknown) => api<T>(path, { method: "PATCH", body });
 export const del = <T,>(path: string) => api<T>(path, { method: "DELETE" });
+
+/** Sign in, register or open the demo; on the phone the tokens come back in the body and are stored. */
+export async function startSession<T>(path: "/auth/login" | "/auth/register" | "/auth/demo", body?: unknown): Promise<T> {
+  const data = await api<T & Partial<Tokens>>(path, { method: "POST", body, noRedirect: true });
+  if (isNative() && data.access_token && data.refresh_token) {
+    await setTokens({ access_token: data.access_token, refresh_token: data.refresh_token });
+  }
+  return data;
+}
+
+export async function endSession(): Promise<void> {
+  const token = refreshToken();
+  await api("/auth/logout", { method: "POST", noRedirect: true, body: isNative() && token ? { refresh_token: token } : undefined }).catch(() => null);
+  await clearTokens();
+}

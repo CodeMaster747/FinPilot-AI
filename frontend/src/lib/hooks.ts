@@ -14,7 +14,6 @@ export type SystemStatus = {
   demo_ready: boolean;
   bootstrap: { status: string; progress: number; message: string | null } | null;
   active_jobs: { id: number; kind: string; status: string; progress: number; message: string | null; user_id: number | null }[];
-  store_url: string;
 };
 
 export function useSystemStatus(fast = false) {

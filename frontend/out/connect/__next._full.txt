@@ -1,0 +1,33 @@
+1:"$Sreact.fragment"
+2:"/_next/static/chunks/3278mh2_licdq.js"
+3:"/_next/static/chunks/3lr9q_j8pcp_n.js"
+4:"/_next/static/chunks/1nx0a_8sww4yr.js"
+5:"/_next/static/chunks/1o6czf49638vr.js"
+6:"/_next/static/chunks/28isq5nfsiqfc.js"
+7:"/_next/static/chunks/3zk-kqgdu3_yj.js"
+8:I[85266,["$2","$3","$4","$5","$6","$7"],"Providers"]
+9:I[39756,["$2","$3","$4","$5","$6","$7"],"default"]
+a:I[37457,["$2","$3","$4","$5","$6","$7"],"default"]
+e:I[47257,["$2","$3","$4","$5","$6","$7"],"ClientPageRoot"]
+f:"/_next/static/chunks/0g_vj7-lvyv-6.js"
+10:I[78971,["$2","$3","$4","$5","$6","$7","$f"],"default"]
+13:I[97367,["$2","$3","$4","$5","$6","$7"],"OutletBoundary"]
+14:"$Sreact.suspense"
+16:"ViewportBoundary"
+17:I[97367,["$2","$3","$4","$5","$6","$7"],"$16"]
+19:"MetadataBoundary"
+1a:I[97367,["$2","$3","$4","$5","$6","$7"],"$19"]
+1c:I[68027,["$2","$3","$4","$5","$6","$7"],"default",1]
+:HL["/_next/static/chunks/0od9g4uj3_t6s.css","style"]
+:HC["/",""]
+c:X
+d:[["children",{"s":"__PAGE__","h":512,"d":{"r":["$","$1","c",{"children":[["$","$Le",null,{"Component":"$10","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@11","$@12"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/0g_vj7-lvyv-6.js","async":true,"nonce":"$undefined"}]],["$","$L13",null,{"children":["$","$14",null,{"name":"Next.MetadataOutlet","children":"$@15"}]}]]}],"p":false,"v":null}}]]
+b:[["children",{"s":"connect","h":512,"d":{"r":["$","$1","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$La",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],"p":false,"v":"$c"},"c":"$Qd"}]]
+0:{"P":null,"c":["","connect",""],"q":"","i":false,"t":{"t":{"s":"","h":528,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/0od9g4uj3_t6s.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}],["$","script","script-0",{"src":"/_next/static/chunks/3278mh2_licdq.js","async":true,"nonce":"$undefined"}],["$","script","script-1",{"src":"/_next/static/chunks/3lr9q_j8pcp_n.js","async":true,"nonce":"$undefined"}],["$","script","script-2",{"src":"/_next/static/chunks/1nx0a_8sww4yr.js","async":true,"nonce":"$undefined"}],["$","script","script-3",{"src":"/_next/static/chunks/1o6czf49638vr.js","async":true,"nonce":"$undefined"}],["$","script","script-4",{"src":"/_next/static/chunks/28isq5nfsiqfc.js","async":true,"nonce":"$undefined"}],["$","script","script-5",{"src":"/_next/static/chunks/3zk-kqgdu3_yj.js","async":true,"nonce":"$undefined"}]],["$","html",null,{"lang":"en","className":"h-full antialiased","children":["$","body",null,{"className":"min-h-full","children":["$","$L8",null,{"children":["$","$L9",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$La",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]}]}]}]]}],"p":false,"v":null},"c":"$Qb"},"h":{"r":["$","$1","h",{"children":[null,["$","$L17",null,{"children":"$L18"}],["$","$L1a",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$14",null,{"name":"Next.Metadata","children":"$L1b"}]}],null]}],null]}],"p":false,"v":null}},"m":"$undefined","G":["$1c",[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/0od9g4uj3_t6s.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]]],"S":true,"r":"$undefined","s":"$undefined","a":"$undefined","l":"$undefined","p":"$undefined","d":"$undefined","b":"QWS3DxlykZ66Xc5G_wKvN"}
+c:C
+11:{}
+12:"$d:0:1:d:r:props:children:0:props:serverProvidedParams:params"
+18:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1, viewport-fit=cover"}],["$","meta","2",{"name":"theme-color","content":"#f6f6f3"}]]
+1d:I[27201,["$2","$3","$4","$5","$6","$7"],"IconMark"]
+15:null
+1b:[["$","title","0",{"children":"FinPilot AI"}],["$","meta","1",{"name":"description","content":"Privacy-first personal finance from your own bank SMS and email: transactions, forecasts, budgets, tax and a wishlist you can afford."}],["$","link","2",{"rel":"icon","href":"/favicon.ico?favicon.117ezoe8m31dk.ico","sizes":"48x48","type":"image/x-icon"}],["$","$L1d","3",{}]]

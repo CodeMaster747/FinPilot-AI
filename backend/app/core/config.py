@@ -1,8 +1,8 @@
 """Runtime configuration.
 
 Everything has a working default so the app runs with zero configuration. Secrets are generated
-on first run into ``data/secret.json``; ports can be overridden with environment variables and are
-swapped for free ones automatically by the server if busy.
+on first run into ``data/secret.json``; the port can be overridden with an environment variable and is
+swapped for a free one automatically by the server if busy.
 """
 
 from __future__ import annotations
@@ -20,22 +20,25 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 ROOT_DIR = BACKEND_DIR.parent
 FRONTEND_OUT_DIR = ROOT_DIR / "frontend" / "out"
 SAMPLES_DIR = ROOT_DIR / "samples"
-APP_VERSION = "1.0.0"
+APP_VERSION = "2.0.0"
+
+# Origins of the FinPilot Android app's WebView (Capacitor serves the bundled UI from these).
+NATIVE_ORIGINS = ("http://localhost", "https://localhost", "capacitor://localhost")
 
 
 class Settings(BaseModel):
     data_dir: Path
-    host: str = "127.0.0.1"
     port: int = 8000
-    store_port: int = 8090
+    lan: bool = True  # also listen on the local network so the phone app can reach this laptop
     secret_key: str
     fernet_key: str
     access_ttl_minutes: int = 30
     refresh_ttl_days: int = 14
+    native_refresh_ttl_days: int = 90  # the phone app signs in once and stays signed in
+    app_timezone: str = "Asia/Kolkata"  # message times are stored as wall-clock time in this zone
     demo_email: str = "demo@finpilot.ai"
     demo_password: str = "demo1234"
     demo_name: str = "Aarav Sharma"
-    raw_retention_days: int = 90
     job_workers: int = 2
     enable_scheduler: bool = True
     testing: bool = False
@@ -51,16 +54,6 @@ class Settings(BaseModel):
     @property
     def models_dir(self) -> Path:
         return self.data_dir / "models"
-
-    @property
-    def store_base_url(self) -> str:
-        """URL the crawler uses to reach the bundled demo storefronts."""
-        return f"http://{self.host}:{self.store_port}"
-
-    @property
-    def public_store_url(self) -> str:
-        """URL the browser uses for product links."""
-        return f"http://localhost:{self.store_port}"
 
 
 def _load_or_create_secrets(data_dir: Path) -> dict[str, str]:
@@ -88,7 +81,8 @@ def get_settings() -> Settings:
         secret_key=secret["secret_key"],
         fernet_key=secret["fernet_key"],
         port=int(os.environ.get("FINPILOT_PORT", "8000")),
-        store_port=int(os.environ.get("FINPILOT_STORE_PORT", "8090")),
+        lan=os.environ.get("FINPILOT_LAN", "1") == "1",
+        app_timezone=os.environ.get("FINPILOT_TZ", "Asia/Kolkata"),
         enable_scheduler=os.environ.get("FINPILOT_SCHEDULER", "1") == "1",
         testing=os.environ.get("FINPILOT_TESTING") == "1",
     )

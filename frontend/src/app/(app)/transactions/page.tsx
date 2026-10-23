@@ -15,8 +15,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { get, post } from "@/lib/api";
+import { downloadFile } from "@/lib/download";
 import { fmtDate, inr } from "@/lib/format";
-import type { AnomalyGroup, Category, Txn } from "@/lib/types";
+import type { AccountRow, AnomalyGroup, Category, Txn } from "@/lib/types";
 
 type Page = { items: Txn[]; total: number; page: number; page_size: number; totals: { in: number; out: number } };
 
@@ -35,15 +36,21 @@ function range(preset: string): { start?: string; end?: string } {
 
 function ManualDialog({ open, onOpenChange, cats }: { open: boolean; onOpenChange: (o: boolean) => void; cats: Category[] }) {
   const qc = useQueryClient();
-  const [f, setF] = useState({ date: iso(new Date()), amount: "", direction: "debit", merchant: "", category_id: "", notes: "" });
+  const [f, setF] = useState({ date: iso(new Date()), amount: "", direction: "debit", merchant: "", category_id: "", account_id: "", notes: "" });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => get<AccountRow[]>("/accounts"), enabled: open });
   const save = useMutation({
-    mutationFn: () => post("/transactions", { ...f, amount: Number(f.amount), category_id: f.category_id ? Number(f.category_id) : null, notes: f.notes || null }),
-    onSuccess: () => { toast.success("Transaction added"); qc.invalidateQueries({ queryKey: ["transactions"] }); onOpenChange(false); },
+    mutationFn: () => post("/transactions", { ...f, amount: Number(f.amount), category_id: f.category_id ? Number(f.category_id) : null,
+      account_id: f.account_id ? Number(f.account_id) : null, notes: f.notes || null }),
+    onSuccess: () => {
+      toast.success("Transaction added");
+      for (const k of [["transactions"], ["dashboard"], ["accounts"]]) qc.invalidateQueries({ queryKey: k });
+      onOpenChange(false);
+    },
     onError: (e) => toast.error((e as Error).message),
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[92dvh] overflow-y-auto">
         <DialogHeader><DialogTitle>Add a transaction by hand</DialogTitle></DialogHeader>
         <form className="grid gap-3" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
           <div className="grid grid-cols-2 gap-3">
@@ -64,6 +71,12 @@ function ManualDialog({ open, onOpenChange, cats }: { open: boolean; onOpenChang
               </NativeSelect>
             </label>
           </div>
+          <label className="grid gap-1 text-sm">Paid from / into (optional)
+            <NativeSelect value={f.account_id} onChange={(e) => setF({ ...f, account_id: e.target.value })}>
+              <option value="">No account (e.g. cash you don&apos;t track)</option>
+              {(accounts.data ?? []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </NativeSelect>
+          </label>
           <label className="grid gap-1 text-sm">Note (optional)<Input value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></label>
           <DialogFooter><Button type="submit" disabled={save.isPending}>{save.isPending && <LoaderCircle className="animate-spin" />} Add</Button></DialogFooter>
         </form>
@@ -86,7 +99,8 @@ function Transactions() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [openId, setOpenId] = useState<number | null>(params.get("id") ? Number(params.get("id")) : null);
   const [manual, setManual] = useState(false);
-  const [csv, setCsv] = useState(false);
+  const [csv, setCsv] = useState(params.get("import") === "1"); // "Import a bank statement" links here with ?import=1
+  const [exporting, setExporting] = useState(false);
   const showAnomalies = params.get("anomalies") === "1";
 
   const cats = useQuery({ queryKey: ["categories"], queryFn: () => get<Category[]>("/categories"), staleTime: Infinity });
@@ -113,7 +127,16 @@ function Transactions() {
         actions={<>
           <Button variant="outline" onClick={() => setManual(true)}><Plus /> Add manually</Button>
           <Button variant="outline" onClick={() => setCsv(true)}><FileSpreadsheet /> Import statement</Button>
-          <Button variant="outline" render={<a href={`/api/v1/transactions/export.csv?${new URLSearchParams(Object.entries({ q, category_id: category, ...range(preset) }).filter(([, v]) => v) as [string, string][])}`} />}><Download /> Export CSV</Button>
+          <Button variant="outline" disabled={exporting} onClick={async () => {
+            setExporting(true);
+            try {
+              await downloadFile("/transactions/export.csv", { q, category_id: category, ...range(preset) }, "finpilot-transactions.csv");
+            } catch (e) {
+              toast.error((e as Error).message);
+            } finally {
+              setExporting(false);
+            }
+          }}>{exporting ? <LoaderCircle className="animate-spin" /> : <Download />} Export CSV</Button>
         </>} />
 
       {showAnomalies && (anomalies.data?.length ?? 0) > 0 && (

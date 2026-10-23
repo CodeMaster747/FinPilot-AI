@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleCheck, FileText, ImageUp, Link2, LoaderCircle, Plus, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import { Camera, CalendarClock, CircleCheck, ImageUp, Link2, LoaderCircle, Plus, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -11,12 +11,13 @@ import { TxnDrawer } from "@/components/txn-drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, del, get, post } from "@/lib/api";
+import { useApiBlobUrl } from "@/lib/download";
 import { fmtDate, inr } from "@/lib/format";
 import { type OcrProgress, type OcrResult, type ReceiptFields, ocrImage, parseOcr, prepareImage } from "@/lib/ocr";
+import { isNative } from "@/lib/platform";
 import type { Category, Txn } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Sample = { name: string; label: string; kind: "image" | "pdf"; url: string; total: string };
 type ParsedReceipt = { id: number; filename: string; kind: "image" | "pdf"; status: string; fields: ReceiptFields; file_url: string; suggested_match: Txn | null; transaction: Txn | null; ocr_text: string };
 type ReceiptRow = { id: number; filename: string; kind: string; status: string; created_at: string; total: string | null; merchant: string | null };
 type Item = { description: string; quantity: number; amount: string };
@@ -55,7 +56,7 @@ function Conf({ c }: { c?: number }) {
   );
 }
 
-function ReviewForm({ r, onSaved }: { r: ParsedReceipt; onSaved: (t: Txn) => void }) {
+function ReviewForm({ r, onSaved }: { r: ParsedReceipt; onSaved: (t: Txn | null) => void }) {
   const qc = useQueryClient();
   const cats = useQuery({ queryKey: ["categories"], queryFn: () => get<Category[]>("/categories"), staleTime: Infinity });
   const f = r.fields;
@@ -65,15 +66,24 @@ function ReviewForm({ r, onSaved }: { r: ParsedReceipt; onSaved: (t: Txn) => voi
   const [items, setItems] = useState<Item[]>((f.items ?? []).map((i) => ({ description: i.description, quantity: i.quantity, amount: i.amount })));
   const [category, setCategory] = useState("");
   const [link, setLink] = useState<boolean>(!!r.suggested_match);
+  const dueDate = f.due_date?.value ?? null;
+  const unpaidBill = Boolean(dueDate && dueDate >= new Date().toISOString().slice(0, 10) && !r.suggested_match);
+  const [asBill, setAsBill] = useState<boolean>(unpaidBill);
   const save = useMutation({
-    mutationFn: () => post<{ transaction: Txn; linked: boolean }>(`/receipts/${r.id}/commit`, {
+    mutationFn: () => post<{ transaction?: Txn; linked?: boolean; bill?: { payee: string; amount: number; due_date: string } }>(`/receipts/${r.id}/commit`, {
       merchant, date, total: Number(total), items, category_id: category ? Number(category) : null,
-      transaction_id: link && r.suggested_match ? r.suggested_match.id : null,
+      transaction_id: link && r.suggested_match && !asBill ? r.suggested_match.id : null,
+      as_bill: asBill, due_date: asBill ? dueDate : null,
     }),
     onSuccess: (res) => {
-      toast.success(res.linked ? `Receipt attached to your ${inr(res.transaction.amount)} payment at ${res.transaction.merchant}` : "Saved as a new transaction");
-      for (const k of [["transactions"], ["dashboard"], ["receipts"], ["review-counts"]]) qc.invalidateQueries({ queryKey: k });
-      onSaved(res.transaction);
+      for (const k of [["transactions"], ["dashboard"], ["receipts"], ["review-counts"], ["forecast"]]) qc.invalidateQueries({ queryKey: k });
+      if (res.bill) {
+        toast.success(`Saved as a bill: ${inr(res.bill.amount)} to ${res.bill.payee}, due ${fmtDate(res.bill.due_date, "d MMM")}. It's in your forecast and is marked paid when the payment arrives.`);
+        onSaved(null);
+        return;
+      }
+      toast.success(res.linked ? `Receipt attached to your ${inr(res.transaction!.amount)} payment at ${res.transaction!.merchant}` : "Saved as a new transaction");
+      onSaved(res.transaction!);
     },
     onError: (e) => toast.error((e as Error).message),
   });
@@ -117,13 +127,26 @@ function ReviewForm({ r, onSaved }: { r: ParsedReceipt; onSaved: (t: Txn) => voi
                 <span className="text-xs text-muted-foreground">×{it.quantity}</span>
                 <input aria-label="Amount" className="w-20 bg-transparent text-right tabular outline-none" value={it.amount}
                   onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} />
-                <button type="button" aria-label="Remove item" onClick={() => setItems(items.filter((_, j) => j !== i))}><Trash2 className="size-3.5 text-muted-foreground" /></button>
+                <button type="button" aria-label="Remove item" className="grid size-9 place-items-center rounded-md hover:bg-muted" onClick={() => setItems(items.filter((_, j) => j !== i))}><Trash2 className="size-4 text-muted-foreground" /></button>
               </li>
             ))}
           </ul>
         </div>
       )}
-      {r.suggested_match ? (
+      {dueDate && (
+        <fieldset className="grid gap-2 rounded-lg border border-border p-3 text-sm">
+          <legend className="px-1 font-medium">This bill is due on {fmtDate(dueDate, "d MMM yyyy")}</legend>
+          <label className="flex items-start gap-2">
+            <input type="radio" name="bill" checked={asBill} onChange={() => setAsBill(true)} className="mt-1" />
+            <span><span className="flex items-center gap-1 font-medium"><CalendarClock className="size-3.5" /> Not paid yet — remind me and include it in my forecast</span></span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input type="radio" name="bill" checked={!asBill} onChange={() => setAsBill(false)} className="mt-1" />
+            <span className="font-medium">Already paid</span>
+          </label>
+        </fieldset>
+      )}
+      {asBill ? null : r.suggested_match ? (
         <fieldset className="grid gap-2 rounded-lg border border-border p-3 text-sm">
           <legend className="px-1 font-medium">Is this the same as a payment you already have?</legend>
           <label className="flex items-start gap-2">
@@ -148,7 +171,7 @@ function ReviewForm({ r, onSaved }: { r: ParsedReceipt; onSaved: (t: Txn) => voi
         </NativeSelect>
       </label>
       <div className="flex justify-end">
-        <Button type="submit" disabled={save.isPending}>{save.isPending ? <LoaderCircle className="animate-spin" /> : <CircleCheck />} {link && r.suggested_match ? "Attach receipt" : "Save payment"}</Button>
+        <Button type="submit" disabled={save.isPending}>{save.isPending ? <LoaderCircle className="animate-spin" /> : <CircleCheck />} {asBill ? "Save as a bill" : link && r.suggested_match ? "Attach receipt" : "Save payment"}</Button>
       </div>
     </form>
   );
@@ -156,9 +179,10 @@ function ReviewForm({ r, onSaved }: { r: ParsedReceipt; onSaved: (t: Txn) => voi
 
 export default function ScanPage() {
   const qc = useQueryClient();
-  const samples = useQuery({ queryKey: ["receipt-samples"], queryFn: () => get<Sample[]>("/receipts/samples") });
   const recent = useQuery({ queryKey: ["receipts"], queryFn: () => get<ReceiptRow[]>("/receipts") });
   const [preview, setPreview] = useState<string | null>(null);
+  const [remotePath, setRemotePath] = useState<string | null>(null);
+  const remotePreview = useApiBlobUrl(remotePath);
   const [ocr, setOcr] = useState<OcrResult | null>(null);
   const [progress, setProgress] = useState<OcrProgress | null>(null);
   const [receipt, setReceipt] = useState<ParsedReceipt | null>(null);
@@ -169,7 +193,21 @@ export default function ScanPage() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   function reset() {
-    setPreview(null); setOcr(null); setReceipt(null); setError(null); setSaved(null); setProgress(null);
+    setPreview(null); setRemotePath(null); setOcr(null); setReceipt(null); setError(null); setSaved(null); setProgress(null);
+  }
+
+  async function takePhoto() {
+    try {
+      const { Camera: Cam, CameraResultType, CameraSource } = await import("@capacitor/camera");
+      const photo = await Cam.getPhoto({ resultType: CameraResultType.Uri, source: CameraSource.Prompt, quality: 85, width: 2000,
+        correctOrientation: true, promptLabelHeader: "Receipt", promptLabelPhoto: "Choose from gallery", promptLabelPicture: "Take a photo" });
+      if (!photo.webPath) return;
+      const blob = await (await fetch(photo.webPath)).blob();
+      await handle(new File([blob], `receipt-${Date.now()}.${photo.format || "jpg"}`, { type: blob.type || "image/jpeg" }));
+    } catch (e) {
+      const msg = (e as Error).message || "";
+      if (!/cancel/i.test(msg)) setError(msg || "Couldn't open the camera. Allow camera access in Android settings.");
+    }
   }
 
   async function handle(file: File) {
@@ -196,51 +234,36 @@ export default function ScanPage() {
     }
   }
 
-  async function trySample(s: Sample) {
-    const res = await fetch(s.url, { credentials: "same-origin" });
-    const blob = await res.blob();
-    await handle(new File([blob], s.name, { type: blob.type || (s.kind === "pdf" ? "application/pdf" : "image/png") }));
-  }
-
   async function reopen(id: number) {
     reset();
     const r = await get<ParsedReceipt>(`/receipts/${id}`);
     setReceipt(r);
-    if (r.kind === "image") setPreview(r.file_url);
+    if (r.kind === "image") setRemotePath(r.file_url);
   }
 
   return (
     <>
-      <PageHeader title="Scan a receipt" description="Optional — most payments already arrive through SMS and email. Scan a receipt to add line items, or to record a cash payment." />
+      <PageHeader title="Scan a receipt" description="Optional — most payments already arrive through SMS and email. Scan a receipt or bill to add line items, record a cash payment, or note a bill that's due." />
       <div className="mb-4 flex items-start gap-2 rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[var(--good)]" />
-        Text recognition runs inside your browser (tesseract.js). Only the recognised text and the image you choose to keep are sent to FinPilot.
+        Text is recognised on this device (tesseract.js). The photo and the recognised text are then sent to your own FinPilot server, so the receipt can be matched to its payment and kept with it.
       </div>
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <div className="grid content-start gap-4">
           <Card title="Choose a receipt">
-            <label className={cn("flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-border p-8 text-center hover:bg-muted", busy && "pointer-events-none opacity-60")}
+            {isNative() && (
+              <Button className="mb-3 h-12 w-full text-base pointer-coarse:h-12" onClick={takePhoto} disabled={busy}><Camera /> Take a photo of a receipt</Button>
+            )}
+            <label className={cn("flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-border p-6 text-center hover:bg-muted sm:p-8", busy && "pointer-events-none opacity-60")}
               onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handle(f); }}>
               <ImageUp className="size-7 text-muted-foreground" />
-              <span className="text-sm font-medium">Drop a photo or PDF here, or click to choose</span>
+              <span className="text-sm font-medium">{isNative() ? "Or choose a photo or PDF bill" : "Drop a photo or PDF here, or click to choose"}</span>
               <span className="text-xs text-muted-foreground">JPG, PNG or WebP photos · digital PDF bills</span>
               <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="sr-only"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handle(f); e.target.value = ""; }} />
             </label>
-            {(samples.data?.length ?? 0) > 0 && (
-              <div className="mt-3 grid gap-1.5">
-                <div className="text-xs font-medium text-muted-foreground">Or try a sample:</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {samples.data!.map((s) => (
-                    <Button key={s.name} size="sm" variant="outline" disabled={busy} onClick={() => trySample(s)}>
-                      {s.kind === "pdf" ? <FileText /> : <ImageUp />} {s.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
           </Card>
-          {(preview || busy) && (
+          {(preview || remotePreview || busy) && (
             <Card title="What was read" description={ocr ? `${ocr.lines.length} lines · ${Math.round(ocr.confidence)}% average confidence · ${(ocr.ms / 1000).toFixed(1)} s` : undefined}>
               {busy && progress && (
                 <div className="mb-3 grid gap-1.5 text-sm" role="status">
@@ -248,10 +271,10 @@ export default function ScanPage() {
                   <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${Math.max(3, progress.progress * 100)}%` }} /></div>
                 </div>
               )}
-              {(ocr?.image || preview) && (
+              {(ocr?.image || preview || remotePreview) && (
                 <div className="relative mx-auto w-fit max-w-full overflow-hidden rounded-lg border border-border bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={ocr?.image || preview!} alt="Receipt" className="block max-h-[640px] w-auto max-w-full" />
+                  <img src={ocr?.image || preview || remotePreview!} alt="Receipt" className="block max-h-[640px] w-auto max-w-full" />
                   {ocr && receipt && <Overlay ocr={ocr} fields={receipt.fields} />}
                 </div>
               )}
@@ -283,13 +306,13 @@ export default function ScanPage() {
               <Card title="Already saved"><p className="text-sm text-muted-foreground">This receipt was saved earlier.</p></Card>
             ) : (
               <Card title="Check and save" description={receipt.kind === "pdf" ? "Read from the PDF's text layer." : "Fields below 80% confidence are highlighted — please check them."}>
-                <ReviewForm key={receipt.id} r={receipt} onSaved={(t) => setSaved(t)} />
+                <ReviewForm key={receipt.id} r={receipt} onSaved={(t) => { if (t) setSaved(t); else reset(); }} />
               </Card>
             )
           ) : !busy && (
             <Card title="How it works">
               <ol className="grid list-decimal gap-1.5 pl-5 text-sm text-muted-foreground">
-                <li>Text is recognised in your browser.</li>
+                <li>Text is recognised on this device.</li>
                 <li>FinPilot finds the merchant, date, total, GST and line items, and shows how sure it is about each.</li>
                 <li>If a card or UPI payment matches, the receipt is attached to it — adding the items without counting the payment twice.</li>
                 <li>Cash receipts become new payments.</li>
@@ -307,8 +330,8 @@ export default function ScanPage() {
                     {r.total && <span className="tabular">{inr(Number(r.total), { decimals: true })}</span>}
                     <Pill tone={r.status === "committed" ? "good" : "warn"}>{r.status === "committed" ? "Saved" : "To check"}</Pill>
                     {r.status !== "committed" && (
-                      <button type="button" aria-label="Discard" onClick={async () => { await del(`/receipts/${r.id}`); qc.invalidateQueries({ queryKey: ["receipts"] }); qc.invalidateQueries({ queryKey: ["review-counts"] }); }}>
-                        <Trash2 className="size-3.5 text-muted-foreground" />
+                      <button type="button" aria-label="Discard" className="grid size-9 place-items-center rounded-md hover:bg-muted" onClick={async () => { await del(`/receipts/${r.id}`); qc.invalidateQueries({ queryKey: ["receipts"] }); qc.invalidateQueries({ queryKey: ["review-counts"] }); }}>
+                        <Trash2 className="size-4 text-muted-foreground" />
                       </button>
                     )}
                   </li>

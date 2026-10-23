@@ -1,4 +1,5 @@
-"""Model-quality report shown in Settings → System & model quality (and quoted in the README).
+"""Model evaluation shown in Settings → Model evaluation (and quoted in the README). The models are trained on
+synthetic messages; they are measured on held-out synthetic data and on hand-written messages in real bank formats.
 Computed once after training (cached as JSON) because evaluating the parsers re-renders a persona."""
 
 from __future__ import annotations
@@ -45,27 +46,3 @@ def load() -> dict[str, Any] | None:
         return json.loads(_path().read_text())
     except (OSError, ValueError):
         return None
-
-
-def picks_precision(db, user, k: int = 10) -> dict[str, Any] | None:  # noqa: ANN001
-    """Precision@k of the demo persona's Smart Picks against its known interests, next to a popularity baseline
-    (the k most-reviewed products). Only defined for the demo persona, whose true interests are known."""
-    from sqlalchemy import select
-
-    from app.models import Product, ProductRecommendation
-    from app.seed.demo_profile import TRUE_INTERESTS
-
-    if not user.is_demo:
-        return None
-
-    def relevant(p: Product) -> bool:
-        text = (p.title + " " + " ".join(p.tags or [])).lower()
-        return any(word in text for word in TRUE_INTERESTS)
-
-    recs = db.scalars(select(Product).join(ProductRecommendation, ProductRecommendation.product_id == Product.id)
-                      .where(ProductRecommendation.user_id == user.id).order_by(ProductRecommendation.score.desc()).limit(k)).all()
-    popular = db.scalars(select(Product).where(Product.stale.is_(False)).order_by(Product.rating_count.desc()).limit(k)).all()
-    if not recs:
-        return None
-    return {"k": k, "picks": round(sum(map(relevant, recs)) / len(recs), 2),
-            "popularity_baseline": round(sum(map(relevant, popular)) / max(1, len(popular)), 2), "evaluated": len(recs)}

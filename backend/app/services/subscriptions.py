@@ -19,10 +19,12 @@ from sqlalchemy.orm import Session
 
 from app.core.money import fmt_inr
 from app.ml.text import normalize
-from app.models import Category, IngestedMessage, Subscription
+from app.models import Category, IngestedMessage, Subscription, Transaction
 from app.services.recurring import Recurring, detect_recurring
 
 SUBSCRIPTION_CATEGORIES = {"Subscriptions", "Sports & Fitness", "Entertainment", "Education", "Phone & Internet"}
+# auto-debits in these categories are loans, investments and rent — commitments, not subscriptions
+NOT_SUBSCRIPTIONS = {"Loan EMI", "Investments", "Insurance", "Rent", "Utilities", "Credit Card Payment", "Transfers"}
 MUSIC = {"spotify", "youtube premium", "apple music", "jiosaavn", "gaana", "amazon music"}
 VIDEO = {"netflix", "jiohotstar", "amazon prime", "sonyliv", "zee5", "disney hotstar"}
 ANNUAL_FACTOR = {"weekly": Decimal(52), "monthly": Decimal(12), "bimonthly": Decimal(6), "quarterly": Decimal(4), "annual": Decimal(1)}
@@ -55,7 +57,12 @@ def refresh_subscriptions(db: Session, user_id: int, today: date | None = None) 
     keep = {s.merchant_name: s.user_action for s in db.scalars(select(Subscription).where(Subscription.user_id == user_id)).all()
             if s.user_action}
     cats = {c.name: c for c in db.scalars(select(Category).where(Category.user_id.is_(None))).all()}
-    recs = [r for r in detect_recurring(db, user_id, today) if r.direction == "debit" and r.category in SUBSCRIPTION_CATEGORIES]
+    from app.services.ingestion.pipeline import AUTOPAY_NOTE
+
+    autopay = set(db.scalars(select(Transaction.merchant_name).where(Transaction.user_id == user_id,
+                                                                   Transaction.notes == AUTOPAY_NOTE).distinct()).all())
+    recs = [r for r in detect_recurring(db, user_id, today) if r.direction == "debit" and (
+        r.category in SUBSCRIPTION_CATEGORIES or (r.merchant in autopay and r.category not in NOT_SUBSCRIPTIONS))]
     db.execute(delete(Subscription).where(Subscription.user_id == user_id))
     active_names = {normalize(r.merchant) for r in recs if r.active}
     annual_by = {normalize(r.merchant): r.amount * ANNUAL_FACTOR[r.cadence] for r in recs if r.active}

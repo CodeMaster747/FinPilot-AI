@@ -20,36 +20,24 @@ def user_analytics(ctx) -> dict:  # noqa: ANN001
     return run_user_analytics(ctx.user_id, progress=ctx.progress)
 
 
-@job("crawl_all")
-def crawl_all(ctx) -> dict:  # noqa: ANN001
-    from sqlalchemy import select
-
-    from app.db.session import session_scope
-    from app.jobs.runner import runner
-    from app.models import User
-    from app.services.scraper import run_crawl
-
-    result = run_crawl(trigger=ctx.params.get("trigger", "manual"), progress=ctx.progress)
-    with session_scope() as db:
-        users = [u.id for u in db.scalars(select(User)).all() if (u.preferences or {}).get("picks_enabled")]
-    for uid in users:
-        runner.enqueue("refresh_picks", user_id=uid)
-    return result
-
-
-@job("refresh_picks")
-def refresh_picks_job(ctx) -> dict:  # noqa: ANN001
+@job("refresh_insights")
+def refresh_insights_job(ctx) -> dict:  # noqa: ANN001
+    """Cheap refresh after a wishlist change (the forecast and subscriptions don't change)."""
     from app.db.session import session_scope
     from app.models import User
-    from app.services.picks import refresh_picks
-
     from app.services.insights import refresh_insights
 
     with session_scope() as db:
-        user = db.get(User, ctx.user_id)
-        result = refresh_picks(db, user)
-        refresh_insights(db, user)
-    return result
+        return refresh_insights(db, db.get(User, ctx.user_id))
+
+
+@job("wishlist_prices")
+def wishlist_prices(ctx) -> dict:  # noqa: ANN001
+    from app.db.session import session_scope
+    from app.services.wishlist import check_all_prices
+
+    with session_scope() as db:
+        return check_all_prices(db, ctx.user_id)
 
 
 @job("quality_report")
@@ -67,13 +55,17 @@ def nightly_all_users(ctx) -> dict:  # noqa: ANN001
     from app.db.session import session_scope
     from app.jobs.runner import runner
     from app.models import User
+    from app.services.ingestion.pipeline import finalize_stale_receipts
 
     runner.enqueue("bootstrap_demo")  # refreshes the demo persona if its data ended before today
     with session_scope() as db:
         ids = db.scalars(select(User.id).where(User.is_demo.is_(False))).all()
+    finalized = 0
     for uid in ids:
+        with session_scope() as db:
+            finalized += finalize_stale_receipts(db, db.get(User, uid))
         runner.enqueue("user_analytics", user_id=uid)
-    return {"users": len(ids)}
+    return {"users": len(ids), "receipts_finalized": finalized}
 
 
 @job("retention_purge")
@@ -81,25 +73,6 @@ def retention_purge(ctx) -> dict:  # noqa: ANN001
     from app.services.privacy import purge_expired_bodies
 
     return purge_expired_bodies()
-
-
-@job("ingest_sample")
-def ingest_sample(ctx) -> dict:  # noqa: ANN001
-    from app.db.session import session_scope
-    from app.jobs.runner import runner
-    from app.models import ImportBatch, User
-    from app.services.demo import load_sample
-
-    kind = ctx.params["kind"]
-    with session_scope() as db:
-        user = db.get(User, ctx.user_id)
-        result = load_sample(db, user, kind, progress=lambda f: ctx.progress(f * 100, f"Reading the sample {kind.upper()} inbox"))
-        counts = result.get("counts", {})
-        db.add(ImportBatch(user_id=user.id, kind=f"sample_{kind}", filename=f"Sample {kind} inbox", total=result.get("total", 0),
-                           imported=counts.get("created", 0) + counts.get("transfer", 0) + counts.get("enriched", 0),
-                           duplicates=counts.get("duplicate", 0), ignored=counts.get("ignored", 0) + counts.get("dropped", 0)))
-    runner.enqueue("user_analytics", user_id=ctx.user_id)
-    return result
 
 
 @job("ingest_file")
@@ -120,6 +93,7 @@ def ingest_file(ctx) -> dict:  # noqa: ANN001
     with session_scope() as db:
         user = db.get(User, ctx.user_id)
         source = consent.require_active(db, user, kind)
+        msgs = consent.within_backfill(source, msgs)
         report = ingest(db, user, source, msgs, feed="import", progress=lambda f: ctx.progress(f * 100, "Reading your file"))
         batch = db.get(ImportBatch, ctx.params["batch_id"])
         if batch:
@@ -130,3 +104,34 @@ def ingest_file(ctx) -> dict:  # noqa: ANN001
             batch.ignored = c.get("ignored", 0) + c.get("dropped", 0)
     runner.enqueue("user_analytics", user_id=ctx.user_id)
     return report.as_dict()
+
+
+@job("ingest_device")
+def ingest_device(ctx) -> dict:  # noqa: ANN001
+    """SMS read on the user's phone and uploaded by the app (already filtered on the phone)."""
+    from app.services.ingestion.device import run_device_batch
+
+    return run_device_batch(ctx.user_id, ctx.params, progress=ctx.progress)
+
+
+@job("imap_sync")
+def imap_sync(ctx) -> dict:  # noqa: ANN001
+    from app.services.ingestion.imap_sync import sync_user
+
+    return sync_user(ctx.user_id, progress=ctx.progress)
+
+
+@job("imap_sync_all")
+def imap_sync_all(ctx) -> dict:  # noqa: ANN001
+    from sqlalchemy import select
+
+    from app.db.session import session_scope
+    from app.jobs.runner import runner
+    from app.models import DataSource, MailboxConnection
+
+    with session_scope() as db:
+        ids = db.scalars(select(MailboxConnection.user_id).join(DataSource, DataSource.id == MailboxConnection.data_source_id)
+                         .where(DataSource.status == "active", MailboxConnection.secret_enc.is_not(None))).all()
+    for uid in ids:
+        runner.enqueue("imap_sync", user_id=uid)
+    return {"mailboxes": len(ids)}

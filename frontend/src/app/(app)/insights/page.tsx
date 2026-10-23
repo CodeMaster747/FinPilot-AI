@@ -21,7 +21,7 @@ type Turn = { id: string; role: "user" | "assistant"; text: string; answer?: Coa
 function severity(i: Insight) {
   if (i.severity >= 80) return { icon: CircleAlert, color: "var(--critical)", label: "Needs attention" };
   if (i.severity >= 60) return { icon: TriangleAlert, color: "var(--warning)", label: "Worth a look" };
-  if (["price_drop", "picks"].includes(i.kind)) return { icon: ShoppingBag, color: "var(--chart-1)", label: "Smart Picks" };
+  if (["price_drop", "wishlist"].includes(i.kind)) return { icon: ShoppingBag, color: "var(--chart-1)", label: "Wishlist" };
   return { icon: Lightbulb, color: "var(--chart-1)", label: "For your information" };
 }
 
@@ -79,12 +79,12 @@ function Coach() {
   const clear = useMutation({ mutationFn: () => del("/coach/history"), onSuccess: () => { qc.setQueryData(["coach-history"], []); setFailure(null); } });
   const send = (q: string) => { if (q.trim() && !ask.isPending) { ask.mutate(q.trim()); setText(""); } };
   return (
-    <section className="flex h-[640px] flex-col rounded-xl border border-border bg-card xl:sticky xl:top-6 xl:h-[calc(100vh-8rem)] xl:self-start" aria-label="Coach">
+    <section className="flex h-[calc(100dvh-11rem-var(--sa-top)-var(--sa-bottom))] min-h-[420px] flex-col rounded-xl border border-border bg-card md:h-[640px] xl:sticky xl:top-6 xl:h-[calc(100dvh-8rem)] xl:self-start" aria-label="Coach">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <Bot className="size-5 text-primary" />
         <div className="flex-1">
           <div className="text-sm font-semibold">Ask FinPilot</div>
-          <div className="text-xs text-muted-foreground">Answers come from your transactions, budgets, goals, forecast and tax data — nothing leaves this computer.</div>
+          <div className="text-xs text-muted-foreground">Answers come from your own transactions, budgets, goals, forecast and tax data, worked out on your FinPilot server — no outside AI service.</div>
         </div>
         {turns.length > 0 && <Button size="sm" variant="ghost" onClick={() => clear.mutate()}><Eraser /> Clear</Button>}
       </div>
@@ -112,7 +112,7 @@ function Coach() {
         <div className="flex flex-wrap gap-1.5">
           {(suggestions.data ?? []).map((s) => (
             <button key={s} type="button" onClick={() => send(s)} disabled={ask.isPending}
-              className="rounded-full border border-border px-2.5 py-1 text-xs hover:bg-muted disabled:opacity-50">{s}</button>
+              className="rounded-full border border-border px-2.5 py-1 text-xs hover:bg-muted disabled:opacity-50 pointer-coarse:px-3 pointer-coarse:py-2">{s}</button>
           ))}
         </div>
         <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); send(text); }}>
@@ -152,7 +152,7 @@ export default function InsightsPage() {
                       <p className="mt-0.5 text-sm text-muted-foreground">{i.body}</p>
                       {i.link && <Link href={appHref(i.link)} className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">Open <ArrowRight className="size-3" /></Link>}
                     </div>
-                    <button type="button" aria-label="Dismiss" className="self-start rounded p-0.5 text-muted-foreground hover:bg-muted" onClick={() => dismiss.mutate(i.id)}><X className="size-4" /></button>
+                    <button type="button" aria-label="Dismiss" className="-m-1 grid size-8 shrink-0 place-items-center self-start rounded-md text-muted-foreground hover:bg-muted pointer-coarse:size-10" onClick={() => dismiss.mutate(i.id)}><X className="size-4" /></button>
                   </li>
                 );
               })}

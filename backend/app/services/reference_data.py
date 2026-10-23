@@ -21,7 +21,7 @@ def ensure_reference_data(db: Session) -> None:
         cat.group, cat.kind, cat.is_essential = spec.group, spec.kind, spec.essential
         cat.is_discretionary, cat.is_sensitive, cat.icon, cat.sort = spec.discretionary, spec.sensitive, spec.icon, i
     db.flush()
-    merchants = {m.name: m for m in db.scalars(select(Merchant)).all()}
+    merchants = {m.name: m for m in db.scalars(select(Merchant).where(Merchant.user_id.is_(None))).all()}
     have = {(a.pattern, a.merchant_id) for a in db.scalars(select(MerchantAlias).where(MerchantAlias.user_id.is_(None))).all()}
     for spec in MERCHANTS:
         merchant = merchants.get(spec.name)

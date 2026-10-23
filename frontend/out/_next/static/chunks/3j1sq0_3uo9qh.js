@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,91622,e=>{"use strict";let t=(0,e.i(82568).U)("Share",{web:()=>e.A(15999).then(e=>new e.ShareWeb)});e.s([],55721),e.i(55721),e.s(["Share",0,t],91622)},15999,e=>{e.v(t=>Promise.all(["static/chunks/006t7jcat-r1g.js"].map(t=>e.l(t))).then(()=>t(75398)))}]);

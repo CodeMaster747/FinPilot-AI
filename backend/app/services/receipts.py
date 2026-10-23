@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.money import D
 from app.ml.text import normalize
-from app.models import Merchant, MerchantAlias, Receipt, Transaction, TransactionItem, User
+from app.models import Merchant, MerchantAlias, Receipt, Transaction, TransactionItem, UpcomingPayment, User
 from app.services.categorization import Categorizer, display_name
 
 AMOUNT = re.compile(r"(?<![\d.])(\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})|\d+\.\d{2}|\d{2,7})(?![\d])")
@@ -38,6 +38,7 @@ DATE_PATTERNS = [
     (re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b"), "Ymd"), (re.compile(r"\b(\d{1,2})[ -]([A-Za-z]{3})[a-z]*[ -,]+(\d{2,4})\b"), "dMy"),
 ]
 MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
+DUE_KEYS = re.compile(r"(?i)(due\s*date|pay\s*by|payment\s*due|last\s*date(?:\s*(?:of|for)\s*payment)?|due\s*on)")
 
 
 @dataclass
@@ -73,7 +74,7 @@ def _amounts(text: str) -> list[Decimal]:
     return vals
 
 
-def _date(text: str) -> date | None:
+def _date(text: str, future_days: int = 1) -> date | None:
     today = date.today()
     for rx, kind in DATE_PATTERNS:
         for m in rx.finditer(text):
@@ -92,7 +93,7 @@ def _date(text: str) -> date | None:
                     d = date(y + 2000 if y < 100 else y, mon, int(m.group(1)))
             except ValueError:
                 continue
-            if today - timedelta(days=3 * 365) <= d <= today + timedelta(days=1):
+            if today - timedelta(days=3 * 365) <= d <= today + timedelta(days=future_days):
                 return d
     return None
 
@@ -124,10 +125,19 @@ def extract_fields(db: Session, user: User, raw_lines: list[dict[str, Any]], ful
         out["merchant"] = field(alias.name if alias else display_name(ln.text), min(0.99, ln.conf * (1.0 if alias else 0.75)), ln)
         out["merchant_raw"] = ln.text
     for ln in lines:
+        if DUE_KEYS.search(ln.text):
+            continue  # a bill's due date is not the date it was issued
         d = _date(ln.text)
         if d:
             out["date"] = field(d.isoformat(), ln.conf, ln)
             break
+    for i, ln in enumerate(lines):  # bills: "Due Date: 25/10/2026" (the date may sit on the next line)
+        if DUE_KEYS.search(ln.text):
+            d = _date(ln.text[DUE_KEYS.search(ln.text).end():], future_days=120) or (
+                _date(lines[i + 1].text, future_days=120) if i + 1 < n else None)
+            if d:
+                out["due_date"] = field(d.isoformat(), ln.conf, ln)
+                break
     total_line, total_val, total_conf = None, None, 0.0
     for prio_rx, weight in TOTAL_KEYS:
         for ln in reversed(lines):
@@ -202,10 +212,11 @@ def commit(db: Session, user: User, receipt: Receipt, merchant: str, when: date,
     ocr_merchant = (receipt.fields or {}).get("merchant_raw") or ""
     # learning: if the user corrected the merchant, remember the OCR text as an alias for it
     if ocr_merchant and normalize(merchant) != normalize((receipt.fields or {}).get("merchant", {}).get("value", "")):
-        m = db.scalar(select(Merchant).where(Merchant.name == merchant))
-        if m is None:
+        m = db.scalar(select(Merchant).where(Merchant.name == merchant, Merchant.user_id.is_(None))) or db.scalar(
+            select(Merchant).where(Merchant.name == merchant, Merchant.user_id == user.id))
+        if m is None:  # a merchant the user named: private to them
             res = cat.categorize(merchant)
-            m = Merchant(name=merchant, category_id=category_id or res.category_id)
+            m = Merchant(user_id=user.id, name=merchant, category_id=category_id or res.category_id)
             db.add(m)
             db.flush()
         pattern = normalize(ocr_merchant)
@@ -231,3 +242,21 @@ def commit(db: Session, user: User, receipt: Receipt, merchant: str, when: date,
                                              amount=D(it["amount"]), source="receipt"))
     receipt.transaction_id, receipt.status = txn.id, "committed"
     return txn
+
+
+def save_as_bill(db: Session, user: User, receipt: Receipt, payee: str, amount: Decimal, due: date) -> UpcomingPayment:
+    """An unpaid bill (a PDF electricity or broadband bill, say): it is money that will go out, not a payment yet.
+    It appears in the forecast and is marked paid when the matching payment arrives."""
+    up = db.scalar(select(UpcomingPayment).where(UpcomingPayment.user_id == user.id, UpcomingPayment.amount == amount,
+                                                 UpcomingPayment.due_date == due))
+    if up is None:
+        up = UpcomingPayment(user_id=user.id, payee=payee[:120], kind="bill", amount=amount, due_date=due)
+        db.add(up)
+        db.flush()
+    paid = db.scalar(select(Transaction).where(
+        Transaction.user_id == user.id, Transaction.direction == "debit", Transaction.amount == amount,
+        Transaction.txn_date >= due - timedelta(days=25), Transaction.txn_date <= due + timedelta(days=3)).limit(1))
+    if paid is not None:
+        up.status, up.transaction_id = "paid", paid.id
+    receipt.status = "committed"
+    return up

@@ -7,13 +7,20 @@ import shutil
 import sys
 from pathlib import Path
 
-USAGE = """usage: python3 run.py [command]
+USAGE = """usage: python3 run.py [command] [options]
 
-  (no command)     start FinPilot AI and open the browser
-  reset            wipe all local data, regenerate the demo, then start
-  test             run the backend test suite
-  migrate          apply database migrations only
-  --no-browser     don't open a browser window
+  (no command)       start FinPilot AI and open the browser
+  reset              wipe all local data (every account), regenerate the demo, then start
+  test               run the backend test suite
+  migrate            apply database migrations only
+  build-frontend     rebuild the web app (needs Node.js)
+  build-android      build the Android app (needs Node.js, JDK 21 and the Android SDK)
+  install-android    install the Android app on a phone connected over USB (needs adb)
+
+  --no-browser       don't open a browser window
+  --tunnel           also publish the server through a Cloudflare quick tunnel (needs cloudflared),
+                     for networks where the phone can't reach this computer directly
+  --local-only       listen on this computer only (the phone app can't connect)
 """
 
 
@@ -35,6 +42,8 @@ def reset_data() -> None:
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     flags = {a for a in args if a.startswith("-")}
+    if "--local-only" in flags:
+        os.environ["FINPILOT_LAN"] = "0"  # read by get_settings(), which hasn't run yet
     positional = [a for a in args if not a.startswith("-")]
     cmd = positional[0] if positional else "serve"
 
@@ -64,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "serve":
         from app.server import serve
 
-        serve(open_browser="--no-browser" not in flags)
+        serve(open_browser="--no-browser" not in flags, tunnel="--tunnel" in flags)
         return 0
     print(USAGE)
     return 2

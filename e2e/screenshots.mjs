@@ -15,7 +15,7 @@ page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
 page.on("console", (m) => { if (m.type() === "error") errors.push(`console: ${m.text()}`); });
 await page.goto(`${BASE}/login/`);
 await page.screenshot({ path: `${out}/login.png` });
-await page.getByRole("button", { name: "Try the demo" }).click();
+await page.getByRole("button", { name: "Explore the demo account (sample data)" }).click();
 await page.waitForURL("**/dashboard/");
 for (const p of pages) {
   await page.goto(`${BASE}/${p}/`);
@@ -23,7 +23,7 @@ for (const p of pages) {
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${out}/${p.replace(/\//g, "_")}.png`, fullPage: true });
 }
-const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, storageState: await ctx.storageState() });
+const mobile = await browser.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, storageState: await ctx.storageState() });
 const mp = await mobile.newPage();
 await mp.goto(`${BASE}/${pages[0]}/`);
 await mp.waitForLoadState("networkidle");

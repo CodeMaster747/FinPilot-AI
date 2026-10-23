@@ -12,7 +12,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.money import fmt_inr
-from app.models import Anomaly, IngestedMessage, Insight, Product, ProductRecommendation, Subscription, Transaction, UpcomingPayment, User
+from app.models import Anomaly, IngestedMessage, Insight, Subscription, Transaction, UpcomingPayment, User
 from app.services import metrics
 from app.services.forecasting.engine import lowest_point
 from app.services.forecasting.service import latest as latest_forecast
@@ -92,12 +92,14 @@ def generate(db: Session, user: User, today: date | None = None) -> list[dict[st
 
     # 4) forecast warning
     fc = latest_forecast(db, user.id)
-    from app.services.picks import safety_buffer
+    from app.services.accounts import balance_known
+    from app.services.affordability import safety_buffer
 
     buffer = safety_buffer(db, user, today)
-    if fc is not None:
+    if fc is not None and metrics.complete_months(db, user.id, today) >= 1:
         low, low_date = lowest_point(fc.payload["projection"], 45)
-        if low < float(buffer):
+        # only warn about the balance when we actually know it (a bank alert, statement or one the user entered)
+        if low < float(buffer) and balance_known(db, user.id):
             b.add("forecast", period, 90, "Balance could run low",
                   f"Your projected balance could fall to {fmt_inr(Decimal(str(low)))} around {date.fromisoformat(low_date):%d %b} "
                   f"— below your {fmt_inr(buffer)} safety buffer.", "/forecast", low=low)
@@ -156,19 +158,20 @@ def generate(db: Session, user: User, today: date | None = None) -> list[dict[st
             b.add("goal", f"{g['id']}:{period}", 50, f"“{g['name']}”: {g['pct']:.0f}% there",
                   f"Put aside {fmt_inr(g['monthly_needed'])}/month to reach {fmt_inr(g['target'])} by {g['target_date']:%b %Y}.", "/budgets")
 
-    # 10) Smart Picks: price drops on picks that now fit
-    for rec, prod in db.execute(select(ProductRecommendation, Product).join(Product).where(
-            ProductRecommendation.user_id == user.id, ProductRecommendation.tier == "buy_now",
-            ProductRecommendation.status.in_(("new", "saved")))).all():
-        drop = next((r for r in rec.reasons if r.startswith("Lowest price in 30 days") or "below its usual price" in r), None)
-        if drop:
-            b.add("price_drop", f"{prod.id}:{today.isoformat()}", 55, f"Price drop: {prod.title}",
-                  f"Now {fmt_inr(prod.price)} ({drop.lower()}) — and it fits your budget ({rec.interest}).", "/picks", product_id=prod.id)
-    n_picks = db.scalar(select(func.count()).select_from(ProductRecommendation).where(
-        ProductRecommendation.user_id == user.id, ProductRecommendation.status == "new")) or 0
-    if n_picks:
-        b.add("picks", period, 30, f"{n_picks} Smart Picks within your budget",
-              "Products matching your wishlist, goals and regular purchases — each checked against your forecast.", "/picks")
+    # 10) wishlist: an item became affordable, or its price dropped
+    from app.services.wishlist import evaluate as evaluate_wishlist
+
+    wl = evaluate_wishlist(db, user, today)
+    for item in wl["items"]:
+        hist = item["history"]
+        if item["price"] is not None and len(hist) >= 2 and item["price"] < max(h["price"] for h in hist[:-1]) * 0.95:
+            b.add("price_drop", f"{item['id']}:{today.isoformat()}", 55 if item["tier"] == "buy_now" else 40, f"Price drop: {item['text']}",
+                  f"Now {fmt_inr(Decimal(str(item['price'])))} at {item['store'] or 'the store'}"
+                  + (" — and it fits your budget." if item["tier"] == "buy_now" else "."), "/wishlist", item_id=item["id"])
+    n_ready = wl["counts"].get("buy_now", 0)
+    if n_ready:
+        b.add("wishlist", period, 30, f"{n_ready} wishlist item{'s' if n_ready > 1 else ''} you can buy now",
+              "They fit this month's wants budget without touching your safety buffer or goals.", "/wishlist", count=n_ready)
 
     # 11) review queue
     to_review = (db.scalar(select(func.count()).select_from(IngestedMessage).where(IngestedMessage.user_id == user.id, IngestedMessage.status == "needs_review")) or 0) \

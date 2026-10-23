@@ -1,43 +1,44 @@
 1:"$Sreact.fragment"
-2:"/_next/static/chunks/2brt-dv23ftmr.js"
-3:"/_next/static/chunks/2z-7t02bb2w16.js"
-4:"/_next/static/chunks/1ykaxbpt7pz7s.js"
+2:"/_next/static/chunks/3278mh2_licdq.js"
+3:"/_next/static/chunks/3lr9q_j8pcp_n.js"
+4:"/_next/static/chunks/1nx0a_8sww4yr.js"
 5:"/_next/static/chunks/1o6czf49638vr.js"
-6:"/_next/static/chunks/0xv77zhttvsu3.js"
-7:I[85266,["$2","$3","$4","$5","$6"],"Providers"]
-8:I[39756,["$2","$3","$4","$5","$6"],"default"]
-9:I[37457,["$2","$3","$4","$5","$6"],"default"]
-b:"ClientSegmentRoot"
-c:I[92825,["$2","$3","$4","$5","$6"],"$b"]
-d:"/_next/static/chunks/1zgpsu5ec6u8e.js"
-e:"/_next/static/chunks/1unh82mdwdto8.js"
-f:"/_next/static/chunks/017ipqv_l72bq.js"
-10:I[88537,["$2","$3","$4","$5","$6","$d","$e","$f"],"default"]
-15:I[47257,["$2","$3","$4","$5","$6"],"ClientPageRoot"]
-16:"/_next/static/chunks/1169owx4i9s-u.js"
-17:"/_next/static/chunks/0v-5ni1_1lzxv.js"
-18:"/_next/static/chunks/1zor--gs89769.js"
-19:"/_next/static/chunks/2qxzbfi2n2f-g.js"
-1a:I[27671,["$2","$3","$4","$5","$6","$d","$e","$f","$16","$17","$18","$19"],"default"]
-1d:I[97367,["$2","$3","$4","$5","$6"],"OutletBoundary"]
-1e:"$Sreact.suspense"
-20:"ViewportBoundary"
-21:I[97367,["$2","$3","$4","$5","$6"],"$20"]
-23:"MetadataBoundary"
-24:I[97367,["$2","$3","$4","$5","$6"],"$23"]
-26:I[68027,["$2","$3","$4","$5","$6"],"default",1]
-:HL["/_next/static/chunks/1039fmzanyizz.css","style"]
+6:"/_next/static/chunks/28isq5nfsiqfc.js"
+7:"/_next/static/chunks/3zk-kqgdu3_yj.js"
+8:I[85266,["$2","$3","$4","$5","$6","$7"],"Providers"]
+9:I[39756,["$2","$3","$4","$5","$6","$7"],"default"]
+a:I[37457,["$2","$3","$4","$5","$6","$7"],"default"]
+c:"ClientSegmentRoot"
+d:I[92825,["$2","$3","$4","$5","$6","$7"],"$c"]
+e:"/_next/static/chunks/2afz30h2fp9kl.js"
+f:"/_next/static/chunks/38c_v9kq-_cq8.js"
+10:"/_next/static/chunks/24lbyfqp9neru.js"
+11:I[88537,["$2","$3","$4","$5","$6","$7","$e","$f","$10"],"default"]
+16:I[47257,["$2","$3","$4","$5","$6","$7"],"ClientPageRoot"]
+17:"/_next/static/chunks/2wo9s7usmk9w2.js"
+18:"/_next/static/chunks/0apl5om64t5h9.js"
+19:"/_next/static/chunks/1kg5k8th8wad-.js"
+1a:"/_next/static/chunks/3w9c_vox2aah5.js"
+1b:I[27671,["$2","$3","$4","$5","$6","$7","$e","$f","$10","$17","$18","$19","$1a"],"default"]
+1e:I[97367,["$2","$3","$4","$5","$6","$7"],"OutletBoundary"]
+1f:"$Sreact.suspense"
+21:"ViewportBoundary"
+22:I[97367,["$2","$3","$4","$5","$6","$7"],"$21"]
+24:"MetadataBoundary"
+25:I[97367,["$2","$3","$4","$5","$6","$7"],"$24"]
+27:I[68027,["$2","$3","$4","$5","$6","$7"],"default",1]
+:HL["/_next/static/chunks/0od9g4uj3_t6s.css","style"]
 :HC["/",""]
-13:X
-14:[["children",{"s":"__PAGE__","h":512,"d":{"r":["$","$1","c",{"children":[["$","$L15",null,{"Component":"$1a","serverProvidedParams":{"searchParams":{},"params":"$a:0:1:d:r:props:children:1:props:serverProvidedParams:params","promises":["$@1b","$@1c"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/1169owx4i9s-u.js","async":true,"nonce":"$undefined"}],["$","script","script-1",{"src":"/_next/static/chunks/0v-5ni1_1lzxv.js","async":true,"nonce":"$undefined"}],["$","script","script-2",{"src":"/_next/static/chunks/1zor--gs89769.js","async":true,"nonce":"$undefined"}],["$","script","script-3",{"src":"/_next/static/chunks/2qxzbfi2n2f-g.js","async":true,"nonce":"$undefined"}]],["$","$L1d",null,{"children":["$","$1e",null,{"name":"Next.MetadataOutlet","children":"$@1f"}]}]]}],"p":false,"v":null}}]]
-12:[["children",{"s":"dashboard","h":512,"d":{"r":["$","$1","c",{"children":[null,["$","$L8",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L9",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],"p":false,"v":"$13"},"c":"$Q14"}]]
-a:[["children",{"s":"(app)","h":512,"d":{"r":["$","$1","c",{"children":[[["$","script","script-0",{"src":"/_next/static/chunks/1zgpsu5ec6u8e.js","async":true,"nonce":"$undefined"}],["$","script","script-1",{"src":"/_next/static/chunks/1unh82mdwdto8.js","async":true,"nonce":"$undefined"}],["$","script","script-2",{"src":"/_next/static/chunks/017ipqv_l72bq.js","async":true,"nonce":"$undefined"}]],["$","$Lc",null,{"Component":"$10","slots":{"children":["$","$L8",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L9",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":"$0:t:t:d:r:props:children:1:props:children:props:children:props:children:props:notFound:0:1:props:style","children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":"$0:t:t:d:r:props:children:1:props:children:props:children:props:children:props:notFound:0:1:props:children:props:children:1:props:style","children":404}],["$","div",null,{"style":"$0:t:t:d:r:props:children:1:props:children:props:children:props:children:props:notFound:0:1:props:children:props:children:2:props:style","children":["$","h2",null,{"style":"$0:t:t:d:r:props:children:1:props:children:props:children:props:children:props:notFound:0:1:props:children:props:children:2:props:children:props:style","children":"This page could not be found."}]}]]}]}]],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]},"serverProvidedParams":{"params":{},"promises":["$@11"]}}]]}],"p":false,"v":null},"c":"$Q12"}]]
-0:{"P":null,"c":["","dashboard",""],"q":"","i":false,"t":{"t":{"s":"","h":528,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/1039fmzanyizz.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}],["$","script","script-0",{"src":"/_next/static/chunks/2brt-dv23ftmr.js","async":true,"nonce":"$undefined"}],["$","script","script-1",{"src":"/_next/static/chunks/2z-7t02bb2w16.js","async":true,"nonce":"$undefined"}],["$","script","script-2",{"src":"/_next/static/chunks/1ykaxbpt7pz7s.js","async":true,"nonce":"$undefined"}],["$","script","script-3",{"src":"/_next/static/chunks/1o6czf49638vr.js","async":true,"nonce":"$undefined"}],["$","script","script-4",{"src":"/_next/static/chunks/0xv77zhttvsu3.js","async":true,"nonce":"$undefined"}]],["$","html",null,{"lang":"en","className":"h-full antialiased","children":["$","body",null,{"className":"min-h-full","children":["$","$L7",null,{"children":["$","$L8",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L9",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]}]}]}]]}],"p":false,"v":null},"c":"$Qa"},"h":{"r":["$","$1","h",{"children":[null,["$","$L21",null,{"children":"$L22"}],["$","$L24",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$1e",null,{"name":"Next.Metadata","children":"$L25"}]}],null]}],null]}],"p":false,"v":null}},"m":"$undefined","G":["$26",[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/1039fmzanyizz.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]]],"S":true,"r":"$undefined","s":"$undefined","a":"$undefined","l":"$undefined","p":"$undefined","d":"$undefined","b":"8_ik20kzI7wB2r4fdVpg_"}
-13:C
-11:"$a:0:1:d:r:props:children:1:props:serverProvidedParams:params"
-1b:{}
-1c:"$a:0:1:d:r:props:children:1:props:serverProvidedParams:params"
-22:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
-27:I[27201,["$2","$3","$4","$5","$6"],"IconMark"]
-1f:null
-25:[["$","title","0",{"children":"FinPilot AI"}],["$","meta","1",{"name":"description","content":"Privacy-first personal finance: consented SMS & email capture, forecasting and affordable picks."}],["$","link","2",{"rel":"icon","href":"/favicon.ico?favicon.117ezoe8m31dk.ico","sizes":"48x48","type":"image/x-icon"}],["$","$L27","3",{}]]
+14:X
+15:[["children",{"s":"__PAGE__","h":512,"d":{"r":["$","$1","c",{"children":[["$","$L16",null,{"Component":"$1b","serverProvidedParams":{"searchParams":{},"params":"$b:0:1:d:r:props:children:1:props:serverProvidedParams:params","promises":["$@1c","$@1d"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/2wo9s7usmk9w2.js","async":true,"nonce":"$undefined"}],["$","script","script-1",{"src":"/_next/static/chunks/0apl5om64t5h9.js","async":true,"nonce":"$undefined"}],["$","script","script-2",{"src":"/_next/static/chunks/1kg5k8th8wad-.js","async":true,"nonce":"$undefined"}],["$","script","script-3",{"src":"/_next/static/chunks/3w9c_vox2aah5.js","async":true,"nonce":"$undefined"}]],["$","$L1e",null,{"children":["$","$1f",null,{"name":"Next.MetadataOutlet","children":"$@20"}]}]]}],"p":false,"v":null}}]]
+13:[["children",{"s":"dashboard","h":512,"d":{"r":["$","$1","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$La",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],"p":false,"v":"$14"},"c":"$Q15"}]]
+b:[["children",{"s":"(app)","h":512,"d":{"r":["$","$1","c",{"children":[[["$","script","script-0",{"src":"/_next/static/chunks/2afz30h2fp9kl.js","async":true,"nonce":"$undefined"}],["$","script","script-1",{"src":"/_next/static/chunks/38c_v9kq-_cq8.js","async":true,"nonce":"$undefined"}],["$","script","script-2",{"src":"/_next/static/chunks/24lbyfqp9neru.js","async":true,"nonce":"$undefined"}]],["$","$Ld",null,{"Component":"$11","slots":{"children":["$","$L9",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$La",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":"$0:t:t:d:r:props:children:1:props:children:props:children:props:children:props:notFound:0:1:props:style","children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":"$0:t:t:d:r:props:children:1:props:children:props:children:props:children:props:notFound:0:1:props:children:props:children:1:props:style","children":404}],["$","div",null,{"style":"$0:t:t:d:r:props:children:1:props:children:props:children:props:children:props:notFound:0:1:props:children:props:children:2:props:style","children":["$","h2",null,{"style":"$0:t:t:d:r:props:children:1:props:children:props:children:props:children:props:notFound:0:1:props:children:props:children:2:props:children:props:style","children":"This page could not be found."}]}]]}]}]],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]},"serverProvidedParams":{"params":{},"promises":["$@12"]}}]]}],"p":false,"v":null},"c":"$Q13"}]]
+0:{"P":null,"c":["","dashboard",""],"q":"","i":false,"t":{"t":{"s":"","h":528,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/0od9g4uj3_t6s.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}],["$","script","script-0",{"src":"/_next/static/chunks/3278mh2_licdq.js","async":true,"nonce":"$undefined"}],["$","script","script-1",{"src":"/_next/static/chunks/3lr9q_j8pcp_n.js","async":true,"nonce":"$undefined"}],["$","script","script-2",{"src":"/_next/static/chunks/1nx0a_8sww4yr.js","async":true,"nonce":"$undefined"}],["$","script","script-3",{"src":"/_next/static/chunks/1o6czf49638vr.js","async":true,"nonce":"$undefined"}],["$","script","script-4",{"src":"/_next/static/chunks/28isq5nfsiqfc.js","async":true,"nonce":"$undefined"}],["$","script","script-5",{"src":"/_next/static/chunks/3zk-kqgdu3_yj.js","async":true,"nonce":"$undefined"}]],["$","html",null,{"lang":"en","className":"h-full antialiased","children":["$","body",null,{"className":"min-h-full","children":["$","$L8",null,{"children":["$","$L9",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$La",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]}]}]}]]}],"p":false,"v":null},"c":"$Qb"},"h":{"r":["$","$1","h",{"children":[null,["$","$L22",null,{"children":"$L23"}],["$","$L25",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$1f",null,{"name":"Next.Metadata","children":"$L26"}]}],null]}],null]}],"p":false,"v":null}},"m":"$undefined","G":["$27",[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/0od9g4uj3_t6s.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]]],"S":true,"r":"$undefined","s":"$undefined","a":"$undefined","l":"$undefined","p":"$undefined","d":"$undefined","b":"QWS3DxlykZ66Xc5G_wKvN"}
+14:C
+12:"$b:0:1:d:r:props:children:1:props:serverProvidedParams:params"
+1c:{}
+1d:"$b:0:1:d:r:props:children:1:props:serverProvidedParams:params"
+23:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1, viewport-fit=cover"}],["$","meta","2",{"name":"theme-color","content":"#f6f6f3"}]]
+28:I[27201,["$2","$3","$4","$5","$6","$7"],"IconMark"]
+20:null
+26:[["$","title","0",{"children":"FinPilot AI"}],["$","meta","1",{"name":"description","content":"Privacy-first personal finance from your own bank SMS and email: transactions, forecasts, budgets, tax and a wishlist you can afford."}],["$","link","2",{"rel":"icon","href":"/favicon.ico?favicon.117ezoe8m31dk.ico","sizes":"48x48","type":"image/x-icon"}],["$","$L28","3",{}]]

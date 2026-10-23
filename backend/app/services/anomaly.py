@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.core.money import fmt_inr
 from app.models import Anomaly, Category, Transaction
 
+NEW_MERCHANT_AFTER_DAYS = 60
 WINDOW_DAYS = 180
 
 
@@ -100,11 +101,14 @@ def detect_anomalies(db: Session, user_id: int, today: date | None = None) -> di
                 when = f"{gap * 60:.0f} minutes" if gap < 1 else f"{gap:.1f} hours"
                 flag(b, "duplicate", 1.0, "high", f"{fmt_inr(amount)} was charged twice by {merchant} within {when}. Check whether one should be refunded.")
 
-    # 4) first-ever payment to a merchant that is unusually large
+    # 4) first-ever payment to a merchant that is unusually large — only once there's enough history for "first ever"
+    # to mean something (right after the first SMS backfill, every merchant is "new")
     seen: set[str] = set()
     typical = float(np.median([float(t.amount) for t, _ in rows]))
+    history_start = rows[0][0].txn_date
     for t, c in rows:
-        if t.merchant_name not in seen and float(t.amount) >= max(5000.0, 8 * typical):
+        established = (t.txn_date - history_start).days >= NEW_MERCHANT_AFTER_DAYS
+        if established and t.merchant_name not in seen and float(t.amount) >= max(5000.0, 8 * typical):
             flag(t, "new_merchant", round(float(t.amount) / typical, 1), "high" if float(t.amount) >= 20000 else "medium",
                  f"First ever payment to {t.merchant_name} — {fmt_inr(t.amount)}, much larger than your usual spends.")
         seen.add(t.merchant_name)

@@ -44,7 +44,7 @@
   direction: credit
   channel: neft
   account_kind: savings
-  regex: 'INR (?P<amount>[\d,]+\.\d{2}) deposited in HDFC Bank A/c XX(?P<mask>\d{4}) on (?P<date>\d{2}-[A-Z]{3}-\d{2}) for NEFT Cr-\w+-(?P<payee>.+)-(?P<ref>\w+)\.\s*Avl bal INR (?P<balance>[\d,]+\.\d{2})'
+  regex: 'INR (?P<amount>[\d,]+\.\d{2}) deposited in HDFC Bank A/c XX(?P<mask>\d{4}) on (?P<date>\d{2}-[A-Z]{3}-\d{2}) for NEFT Cr-\w+-(?P<payee>[^-]+?)(?:-[^-]+)?-(?P<ref>\w+)\.\s*Avl bal INR (?P<balance>[\d,]+\.\d{2})'
   date_formats: ['%d-%b-%y']
 
 - id: hdfc_atm

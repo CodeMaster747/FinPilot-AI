@@ -18,7 +18,7 @@ import type { Category } from "@/lib/types";
 type Budget = { id: number; category: string; category_id: number; icon: string; budget: number; spent: number; pct: number; pace_pct: number; over_pace: boolean; over: boolean };
 type Goal = { id: number; name: string; target: number; saved: number; target_date: string; pct: number; remaining: number; months_left: number; monthly_needed: number; product_id: number | null };
 
-const KEYS = [["budgets"], ["goals"], ["dashboard"], ["picks"], ["insights"]];
+const KEYS = [["budgets"], ["goals"], ["dashboard"], ["wishlist"], ["insights"]];
 
 function useInvalidate() {
   const qc = useQueryClient();
@@ -163,7 +163,7 @@ export default function BudgetsPage() {
   const monthly = (goals.data ?? []).reduce((s, g) => s + g.monthly_needed, 0);
   return (
     <>
-      <PageHeader title="Budgets & goals" description="Monthly limits per category, and what you're saving towards. Both feed your insights, the coach and Smart Picks affordability." />
+      <PageHeader title="Budgets & goals" description="Monthly limits per category, and what you're saving towards. Both feed your insights, the coach and what your wishlist says you can afford." />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Budgets this month" description={budgets.data?.length ? `${inr(totalSpent)} spent of ${inr(totalBudget)} budgeted. The tick on each bar shows where an even pace would be today.` : undefined}>
           {!budgets.data ? <LoaderCircle className="size-5 animate-spin" /> : budgets.data.length === 0
@@ -171,7 +171,7 @@ export default function BudgetsPage() {
             : <ul className="divide-y divide-border">{budgets.data.map((b) => <BudgetRow key={b.id} b={b} />)}</ul>}
           <AddBudget cats={cats.data ?? []} taken={new Set((budgets.data ?? []).map((b) => b.category_id))} />
         </Card>
-        <Card title="Goals" description={goals.data?.length ? `Together they need ${inr(monthly)}/month. Smart Picks funds these first, so a recommendation never delays a goal.` : undefined}>
+        <Card title="Goals" description={goals.data?.length ? `Together they need ${inr(monthly)}/month. Your wishlist funds these first, so buying something never delays a goal.` : undefined}>
           {!goals.data ? <LoaderCircle className="size-5 animate-spin" /> : goals.data.length === 0
             ? <EmptyState icon={Target} title="No goals yet">Create a goal to plan a big purchase or build an emergency fund.</EmptyState>
             : <ul className="grid gap-3">{goals.data.map((g) => <GoalCard key={g.id} g={g} />)}</ul>}

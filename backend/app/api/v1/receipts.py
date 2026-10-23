@@ -35,10 +35,8 @@ class CommitBody(BaseModel):
     items: list[dict[str, Any]] = Field(default_factory=list)
     category_id: int | None = None
     transaction_id: int | None = None
-
-
-def samples_dir() -> Path:
-    return get_settings().data_dir / "samples" / "receipts"
+    as_bill: bool = False  # an unpaid bill (e.g. a PDF electricity bill): record it as due, not as a payment
+    due_date: dt.date | None = None
 
 
 def receipt_out(db, user, r: Receipt) -> dict[str, Any]:  # noqa: ANN001
@@ -66,24 +64,8 @@ def _store(data: bytes, ext: str) -> Path:
     return path
 
 
-@router.get("/samples")
-def samples(user: CurrentUser) -> list[dict]:
-    meta = samples_dir() / "samples.json"
-    if not meta.exists():
-        return []
-    return [{**m, "url": f"/api/v1/receipts/samples/{m['name']}"} for m in json.loads(meta.read_text())]
-
-
-@router.get("/samples/{name}")
-def sample_file(name: str, user: CurrentUser) -> FileResponse:
-    path = (samples_dir() / name).resolve()
-    if path.parent != samples_dir().resolve() or not path.exists():
-        raise HTTPException(404, "Sample not found")
-    return FileResponse(path)
-
-
 @router.post("/parse")
-async def parse_image(db: DB, user: CurrentUser, file: UploadFile = File(...), ocr: str = Form(...), dry_run: bool = Form(False)) -> dict:
+async def parse_image(db: DB, user: CurrentUser, file: UploadFile = File(...), ocr: str = Form(...)) -> dict:
     data = await file.read()
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "Image is larger than 12 MB.")
@@ -93,8 +75,6 @@ async def parse_image(db: DB, user: CurrentUser, file: UploadFile = File(...), o
     except json.JSONDecodeError as exc:
         raise HTTPException(422, "OCR result is not valid JSON") from exc
     fields = svc.extract_fields(db, user, payload.get("lines", []), payload.get("text"))
-    if dry_run:  # OCR benchmark: report what was read without storing anything
-        return {"fields": {k: v for k, v in fields.items() if k != "merchant_raw"}}
     r = Receipt(user_id=user.id, filename=(file.filename or "receipt")[:200], file_path=str(_store(data, ext)), kind="image",
                 status="parsed", ocr_text=str(payload.get("text", ""))[:20000], words=[], fields=fields,
                 image_size={"width": payload.get("width"), "height": payload.get("height")})
@@ -155,6 +135,10 @@ def commit_receipt(receipt_id: int, body: CommitBody, db: DB, user: CurrentUser)
         raise HTTPException(404, "Receipt not found")
     if r.status == "committed":
         raise HTTPException(409, "This receipt was already saved.")
+    if body.as_bill:
+        up = svc.save_as_bill(db, user, r, body.merchant.strip(), D(body.total), body.due_date or body.date)
+        runner.enqueue("user_analytics", user_id=user.id, db=db)
+        return {"ok": True, "bill": {"id": up.id, "payee": up.payee, "amount": float(up.amount), "due_date": up.due_date.isoformat()}}
     txn = svc.commit(db, user, r, body.merchant.strip(), body.date, D(body.total), body.items, body.category_id, body.transaction_id)
     runner.enqueue("user_analytics", user_id=user.id, db=db)
     return {"ok": True, "transaction": txn_out(txn, Lookups(db, user.id)), "linked": body.transaction_id is not None}

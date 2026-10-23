@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.core.config import APP_VERSION, get_settings
-from app.core.deps import DB
+from app.core.deps import DB, CurrentUser, OptionalUser
+from app.jobs.runner import live_progress
 from app.models import Job, User
 from app.schemas.common import iso
-from app.jobs.runner import live_progress
 from app.services.system import CAPABILITIES
 
 router = APIRouter(tags=["system"])
@@ -17,9 +17,10 @@ ACTIVE = ("queued", "running")
 
 @router.get("/health")
 def health() -> dict:
+    """Also used by the phone app's "Test connection" when pairing."""
     from app.core.instance import INSTANCE_ID
 
-    return {"status": "ok", "version": APP_VERSION, "instance": INSTANCE_ID}
+    return {"status": "ok", "app": "FinPilot AI", "version": APP_VERSION, "instance": INSTANCE_ID}
 
 
 @router.get("/system/capabilities")
@@ -28,12 +29,16 @@ def capabilities() -> dict:
 
 
 @router.get("/system/status")
-def status(db: DB) -> dict:
-    """Public: drives the 'Preparing demo data' banner on the login page and inside the app."""
+def status(db: DB, user: OptionalUser) -> dict:
+    """Drives the 'Preparing the demo' note on the login page and the activity banner inside the app.
+    Signed-in users see only their own background jobs (plus app-wide ones)."""
     settings = get_settings()
     demo = db.scalar(select(User).where(User.email == settings.demo_email))
     bootstrap = db.scalar(select(Job).where(Job.kind == "bootstrap_demo").order_by(Job.id.desc()).limit(1))
-    active = db.scalars(select(Job).where(Job.status.in_(ACTIVE)).order_by(Job.id)).all()
+    active: list[Job] = []
+    if user is not None:
+        active = db.scalars(select(Job).where(Job.status.in_(ACTIVE), or_(Job.user_id == user.id, Job.user_id.is_(None)))
+                            .order_by(Job.id)).all()
     return {
         "version": APP_VERSION,
         "demo_ready": bool(demo and demo.data_end_date and (bootstrap is None or bootstrap.status not in ACTIVE)),
@@ -45,5 +50,15 @@ def status(db: DB) -> dict:
              "user_id": j.user_id, "started_at": iso(j.started_at)}
             for j in active
         ],
-        "store_url": settings.public_store_url,
     }
+
+
+@router.get("/system/pairing")
+def pairing(user: CurrentUser) -> dict:
+    """Addresses the phone app can use to reach this server, with a QR code to scan from the app."""
+    from app.core.network import PAIRING, qr_svg
+
+    info = PAIRING.as_dict()
+    info["qr_svg"] = qr_svg(PAIRING.best_url) if PAIRING.best_url else None
+    info["lan_enabled"] = get_settings().lan
+    return info

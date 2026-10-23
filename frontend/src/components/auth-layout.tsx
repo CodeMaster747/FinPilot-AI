@@ -1,15 +1,15 @@
-import { CircleCheck, LineChart, Lock, MessageSquareText, ShoppingBag } from "lucide-react";
+import { CircleCheck, Heart, LineChart, Lock, MessageSquareText } from "lucide-react";
 
 const POINTS = [
-  { icon: MessageSquareText, title: "Reads what you allow", text: "Bank SMS and receipts become transactions — only after you grant each source." },
+  { icon: MessageSquareText, title: "Reads what you allow", text: "Your bank SMS (from the Android app) and email become transactions — only after you grant each source." },
   { icon: LineChart, title: "Sees what's coming", text: "A 90-day balance forecast with honest uncertainty, bills and subscriptions included." },
-  { icon: ShoppingBag, title: "Spends safely", text: "Smart Picks finds products that fit your budget without touching your safety buffer." },
-  { icon: Lock, title: "Private by design", text: "Runs on your own computer, offline, with no paid AI and no bank login." },
+  { icon: Heart, title: "Spends safely", text: "Your wishlist is checked against your real budget, bills and goals before anything says “buy now”." },
+  { icon: Lock, title: "Private by design", text: "Runs on your own laptop, with no paid AI, no bank login and no cloud." },
 ];
 
 export function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
+    <div className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
       <section className="hidden flex-col justify-between bg-[#0f2a4d] p-10 text-white lg:flex">
         <div className="flex items-center gap-2">
           <span className="flex size-9 items-center justify-center rounded-lg bg-white/15"><CircleCheck className="size-5" /></span>
@@ -29,9 +29,9 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
             ))}
           </ul>
         </div>
-        <p className="text-xs text-white/50">Sem VII Full Stack Development project · runs locally at ₹0</p>
+        <p className="text-xs text-white/50">Sem VII Full Stack Development project · runs on your laptop at ₹0</p>
       </section>
-      <section className="flex items-center justify-center p-6">
+      <section className="flex items-center justify-center px-4 pt-[max(1.5rem,var(--sa-top))] pb-[max(1.5rem,var(--sa-bottom))]">
         <div className="w-full max-w-sm">{children}</div>
       </section>
     </div>

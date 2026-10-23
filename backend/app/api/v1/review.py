@@ -86,7 +86,7 @@ def resolve_message(message_id: int, body: MessageResolution, db: DB, user: Curr
     payee = body.payee or (fields.get("payee") or {}).get("value") or (fields.get("merchant") or {}).get("value") or "Unknown"
     when = body.date or (date.fromisoformat(fields["date"]["value"]) if fields.get("date") else m.received_at.date())
     cat = Categorizer(db, user.id)
-    res = cat.categorize(payee)
+    res = cat.categorize(payee, direction=direction, hint=f"{m.kind} {payee}")
     category_id = body.category_id or res.category_id
     txn = Transaction(user_id=user.id, txn_date=when, occurred_at=datetime.combine(when, time(12, 0)), amount=D(amount),
                       direction=direction, description=payee[:255], merchant_id=res.merchant_id, merchant_name=res.merchant_name,

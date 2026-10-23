@@ -8,6 +8,8 @@ Own-account transfers and card bill payments are paired and excluded from spendi
 
 from __future__ import annotations
 
+import re
+import threading
 import uuid
 from collections import Counter
 from dataclasses import dataclass, field
@@ -33,7 +35,7 @@ from app.models import (
     UpcomingPayment,
     User,
 )
-from app.services.accounts import resolve_account
+from app.services.accounts import resolve_account, set_balance
 from app.services.categorization import Categorizer
 from app.services.ingestion.classify import classify
 from app.services.ingestion.extract import Extraction, extract, sender_name
@@ -42,6 +44,20 @@ from app.services.ingestion.types import RawMessage
 
 LOW_CONFIDENCE = 0.6
 NOT_STORED = ("otp", "promo", "other")
+AUTOPAY = re.compile(r"(?i)\b(autopay|auto[- ]pay|mandate|e-?mandate|standing instruction|auto[- ]?debit|recurring payment|"
+                     r"si (?:txn|transaction))\b")
+AUTOPAY_NOTE = "Auto-debit (UPI AutoPay / mandate)"
+
+
+def keeps(kind: str, p: float, ex: Extraction) -> bool:
+    """Whether a classified message is stored. OTPs, promotions and "other" are not — except that a message with an
+    amount, a direction and an account/card/UPI marker is never thrown away unread: if the model thinks it's a
+    promotion or "other", a person decides (Review). OTPs are never stored, whatever they look like."""
+    if kind not in NOT_STORED:
+        return True
+    looks_like_money = bool(ex.get("amount") and ex.get("direction"))
+    names_account = bool(ex.get("mask") or ex.get("ref") or ex.get("vpa"))
+    return kind != "otp" and looks_like_money and (p < LOW_CONFIDENCE or names_account)
 
 
 @dataclass
@@ -92,6 +108,7 @@ class Pipeline:
         self._load_accounts()
         name_tokens = [t for t in normalize(user.name).split() if len(t) > 2]
         self.user_tokens = set(name_tokens)
+        self.extra_domains = tuple((user.preferences or {}).get("extra_email_domains") or ())
 
     def _load_accounts(self) -> None:
         for acct in self.db.scalars(select(Account).where(Account.user_id == self.user.id)).all():
@@ -104,7 +121,7 @@ class Pipeline:
         self.report.total = len(msgs)
         kept: list[RawMessage] = []
         for m in msgs:
-            decision = prefilter(m)
+            decision = prefilter(m, self.extra_domains)
             if decision.keep:
                 kept.append(m)
             else:
@@ -140,8 +157,7 @@ class Pipeline:
     # -- per message -----------------------------------------------------------------------------
     def process(self, m: RawMessage, kind: str, p: float) -> Outcome:
         ex = extract(m, kind)
-        looks_like_money = bool(ex.get("amount") and ex.get("direction"))
-        if kind in NOT_STORED and not (p < LOW_CONFIDENCE and looks_like_money and kind != "otp"):
+        if not keeps(kind, p, ex):
             label = {"otp": "One-time password", "promo": "Promotional message", "other": "Not a financial record"}[kind]
             return Outcome("ignored", f"{label} — not stored", kind, p, fields=ex.to_json())
         row = IngestedMessage(
@@ -192,7 +208,7 @@ class Pipeline:
             return Outcome("duplicate", f"Same payment already recorded from {txn.origin.upper()} — linked as evidence",
                            transaction_id=txn.id)
 
-        cat = self.cat.categorize(payee, vpa)
+        cat = self.cat.categorize(payee, vpa, direction=direction, hint=m.body, channel=ex.channel)
         needs_review = cat.category_name == "Misc" or min(ex.conf("amount"), ex.conf("direction")) < 0.8
         txn = Transaction(
             user_id=self.user.id, account_id=acct.id if acct else None, txn_date=txn_date, occurred_at=occurred,
@@ -201,6 +217,8 @@ class Pipeline:
             category_source=cat.source, category_confidence=cat.confidence, origin=m.channel, ref_no=ref,
             needs_review=needs_review,
         )
+        if direction == "debit" and AUTOPAY.search(m.body):
+            txn.notes = AUTOPAY_NOTE  # subscriptions are often paid this way, whatever the merchant's category
         self.db.add(txn)
         self.db.flush()
         row.transaction_id, row.status, row.match_role, row.match_score = txn.id, "linked", "primary", 1.0
@@ -245,7 +263,7 @@ class Pipeline:
     def _snapshot(self, acct: Account | None, ex: Extraction, as_of: datetime, row: IngestedMessage) -> None:
         if acct and acct.kind != "credit_card" and ex.get("balance"):
             self.db.add(BalanceSnapshot(user_id=self.user.id, account_id=acct.id, balance=D(ex.get("balance")),
-                                        as_of=as_of, message_id=row.id))
+                                        as_of=as_of, message_id=row.id, source="alert"))
 
     def _transfer_signal(self, txn: Transaction, text: str, acct: Account | None, channel: str | None) -> str | None:
         """'card' for card bill payments, 'self' for own-account transfers, 'maybe' for account-to-account moves."""
@@ -309,18 +327,44 @@ class Pipeline:
             # a merchant's refund notice (not the bank's) announces a credit that arrives later: wait, then enrich
             return self.on_receipt(row, m, ex, refund=True)
         ex.set("direction", "credit", 0.95)
+        earlier = self._refund_recorded_from_email(D(amount), _when(ex, m.received_at)[0], m.channel)
+        if earlier is not None:  # the user already recorded this refund from the merchant's email (Review → create)
+            row.transaction_id, row.status, row.match_role, row.match_score = earlier.id, "linked", "duplicate", 0.8
+            return Outcome("duplicate", f"Refund {fmt_inr(earlier.amount, True)} was already recorded from the merchant's email — "
+                                        "linked as evidence", transaction_id=earlier.id)
         outcome = self.on_transaction(row, m, ex)
         if outcome.transaction_id:
             txn = self.db.get(Transaction, outcome.transaction_id)
-            orig = self.db.scalar(select(Transaction).where(
-                Transaction.user_id == self.user.id, Transaction.direction == "debit", Transaction.merchant_name == txn.merchant_name,
-                Transaction.amount >= txn.amount, Transaction.txn_date >= txn.txn_date - timedelta(days=60),
-                Transaction.txn_date <= txn.txn_date).order_by(Transaction.txn_date.desc()).limit(1))
+            orig = None
+            if ex.get("refund_of_ref"):  # "refund of UPI/6275…": the bank names the payment being refunded
+                orig = self.db.scalar(select(Transaction).where(
+                    Transaction.user_id == self.user.id, Transaction.direction == "debit", Transaction.ref_no == ex.get("refund_of_ref")))
+                if orig is not None:
+                    txn.merchant_id, txn.merchant_name, txn.description = orig.merchant_id, orig.merchant_name, f"Refund — {orig.merchant_name}"
+            if orig is None:
+                orig = self.db.scalar(select(Transaction).where(
+                    Transaction.user_id == self.user.id, Transaction.direction == "debit", Transaction.merchant_name == txn.merchant_name,
+                    Transaction.amount >= txn.amount, Transaction.txn_date >= txn.txn_date - timedelta(days=60),
+                    Transaction.txn_date <= txn.txn_date).order_by(Transaction.txn_date.desc()).limit(1))
             if orig:
                 txn.notes = f"Refund for {orig.merchant_name} purchase on {orig.txn_date:%d %b %Y}"
                 txn.category_id, txn.category_source = orig.category_id, "system"
             outcome.detail = f"Refund {fmt_inr(txn.amount, True)} from {txn.merchant_name} — nets against spending"
         return outcome
+
+    def _refund_recorded_from_email(self, amount: Decimal, day: date, channel: str) -> Transaction | None:
+        """A credit created from a refund email, with no bank alert attached yet, within 10 days."""
+        if channel != "sms":
+            return None
+        for t in self.db.scalars(select(Transaction).where(
+                Transaction.user_id == self.user.id, Transaction.direction == "credit", Transaction.amount == amount,
+                Transaction.origin == "email", Transaction.txn_date >= day - timedelta(days=10),
+                Transaction.txn_date <= day + timedelta(days=10))).all():
+            has_sms = self.db.scalar(select(IngestedMessage.id).where(IngestedMessage.transaction_id == t.id,
+                                                                      IngestedMessage.channel == "sms").limit(1))
+            if has_sms is None:
+                return t
+        return None
 
     def on_failed(self, row: IngestedMessage, m: RawMessage, ex: Extraction) -> Outcome:
         low = m.body.lower()
@@ -343,7 +387,7 @@ class Pipeline:
         acct = resolve_account(self.db, self.user.id, ex.get("mask"), ex.institution, ex.account_kind or "savings")
         if acct and ex.get("balance") and acct.kind != "credit_card":
             self.db.add(BalanceSnapshot(user_id=self.user.id, account_id=acct.id, balance=D(ex.get("balance")),
-                                        as_of=m.received_at, message_id=row.id))
+                                        as_of=m.received_at, message_id=row.id, source="alert"))
             return Outcome("informational", f"Balance of {acct.name}: {fmt_inr(D(ex.get('balance')), True)}")
         return Outcome("informational", "Balance alert noted")
 
@@ -356,6 +400,10 @@ class Pipeline:
             return Outcome("informational", row.review_note)
         amount, due_d = D(amount), date.fromisoformat(due)
         kind = "card_due" if row.kind == "statement" else "bill"
+        if kind == "card_due" and ex.get("mask"):
+            card = resolve_account(self.db, self.user.id, ex.get("mask"), ex.institution, "credit_card")
+            if card is not None and card.kind == "credit_card":
+                set_balance(self.db, self.user.id, card, D(ex.get("total") or amount), m.received_at, "statement", row.id)
         existing = self.db.scalar(select(UpcomingPayment).where(
             UpcomingPayment.user_id == self.user.id, UpcomingPayment.due_date == due_d, UpcomingPayment.amount == amount))
         if existing is None:
@@ -519,9 +567,38 @@ class Pipeline:
             self.report.counts["created_from_receipt"] += 1
 
 
+_LOCKS: dict[int, threading.RLock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def user_lock(user_id: int) -> threading.RLock:
+    """One ingestion at a time per user: the phone's SMS sync, a mailbox sync and a file import never interleave
+    (each checks what is already stored before adding, which only works if they take turns)."""
+    with _LOCKS_GUARD:
+        return _LOCKS.setdefault(user_id, threading.RLock())
+
+
 def ingest(db: Session, user: User, source: DataSource, messages: list[RawMessage], feed: str,
            finalize_pending: bool = True, progress=None) -> IngestReport:  # noqa: ANN001
-    return Pipeline(db, user, source, feed, finalize_pending).run(messages, progress)
+    """`finalize_pending`: True for one-off historical imports (a receipt with no bank alert by the end of the import
+    becomes its own transaction). Continuous feeds (phone SMS, mailbox sync) pass False, so a receipt that arrives
+    before its bank SMS waits up to 3 days for it instead of being counted twice."""
+    with user_lock(user.id):
+        report = Pipeline(db, user, source, feed, finalize_pending).run(messages, progress)
+        db.commit()  # visible to the next ingestion before the lock is released
+        return report
+
+
+def finalize_stale_receipts(db: Session, user: User) -> int:
+    """Nightly: receipts that waited more than 3 days without a matching bank alert become transactions."""
+    source = db.scalar(select(DataSource).where(DataSource.user_id == user.id, DataSource.kind == "email"))
+    if source is None:
+        return 0
+    with user_lock(user.id):
+        pipe = Pipeline(db, user, source, "nightly", finalize_pending=False)
+        pipe.finish()
+        db.commit()
+        return pipe.report.counts.get("created_from_receipt", 0)
 
 
 def sender_display(sender: str) -> str:

@@ -8,7 +8,7 @@ _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 _AMOUNT = re.compile(r"(?i)(?:rs\.?|inr|₹)\s*[\d,]+(?:\.\d+)?")
 _LONG_NUM = re.compile(r"\d{5,}")
 _DIGITS = re.compile(r"\d")
-_DLT = re.compile(r"^[A-Z]{2}-([A-Z0-9]{6})(?:-([PSTG]))?$")
+_DLT = re.compile(r"^(?:[A-Z]{2}-)?([A-Z0-9]{6})(?:-([PSTG]))?$")
 
 
 def normalize(text: str) -> str:
@@ -20,7 +20,7 @@ def sender_tokens(channel: str, sender: str) -> str:
     sender = (sender or "").strip()
     if channel == "sms":
         m = _DLT.match(sender.upper())
-        if m:
+        if m and any(c.isalpha() for c in m.group(1)):  # same rule as ingestion.extract.header_of
             return f"hdr_{m.group(1).lower()} sfx_{(m.group(2) or 'x').lower()}"
         return "hdr_phone" if any(c.isdigit() for c in sender[:4]) else f"hdr_{normalize(sender).replace(' ', '_')}"
     domain = sender.rsplit("@", 1)[-1].strip("> ").lower()

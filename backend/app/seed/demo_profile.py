@@ -25,18 +25,13 @@ def goals(today: date) -> list[dict]:
 
 
 WISHLIST = [
-    {"text": "Noise-cancelling headphones", "max_price": Decimal("12000")},
-    {"text": "Running shoes", "max_price": Decimal("6000")},
-    {"text": "Air fryer", "max_price": None},
-    {"text": "Mirrorless camera", "max_price": Decimal("80000")},
+    {"text": "Noise-cancelling headphones", "price": Decimal("9990"), "max_price": Decimal("12000")},
+    {"text": "Running shoes", "price": Decimal("5499"), "max_price": Decimal("6000")},
+    {"text": "Air fryer", "price": Decimal("6999"), "max_price": None},
+    {"text": "Mirrorless camera", "price": Decimal("74990"), "max_price": Decimal("80000")},
 ]
 
 RULES = [("ramesh kumar", "Rent")]  # the landlord's UPI name -> Rent
-
-# Ground truth for evaluating Smart Picks: what this persona actually wants, from the wishlist, goals,
-# regular purchases and the merchants they use. Never read by the recommender itself.
-TRUE_INTERESTS = ["headphones", "running shoes", "air fryer", "camera", "laptop", "luggage", "travel", "backpack", "packing",
-                  "whey", "coffee", "tea", "fitness", "yoga", "foam", "gym", "dumbbell", "pull-up", "kettle", "music", "earbuds", "speaker"]
 
 TAX_PROFILE = {
     "employer": "Zentrix Technologies Pvt Ltd",
@@ -54,10 +49,7 @@ TAX_PROFILE = {
 }
 
 PREFERENCES = {
-    "picks_enabled": True,
     "buffer_floor": 15000,
     "emergency_months": 3,
-    "picks_weekly_cap": 12,
-    "excluded_interest_categories": ["Healthcare"],
     "retention_days": 90,
 }

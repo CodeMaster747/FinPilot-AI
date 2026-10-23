@@ -27,6 +27,13 @@ DEBIT = [
     "A/c {acct} debited by Rs {amt} via NEFT to {p} on {d}. Ref {ref}.",
     "INR {amt} charged on your {bank} credit card {acct} at {m} on {d}. Available limit INR {bal}.",
     "Debit alert: Rs.{amt} paid to {m} from a/c {acct} on {d}. Bal: Rs.{bal}",
+    # alert layouts that also quote a balance or arrive on several lines (common in real bank SMS)
+    "Dear Customer, A/c {acct} has a debit of Rs {amt} on {d} towards {m}. Available Bal Rs {bal}.",
+    "Rs {amt} paid to {m} from your {bank} a/c {acct} on {d}. Balance: Rs {bal}",
+    "INR {amt} debited\nAcct {acct}\n{d}\n{m}\nAvl Bal INR {bal}",
+    "Your a/c {acct} is debited by INR {amt} for {m} on {d}. Avl Bal: INR {bal}. If not you, call the bank.",
+    "{bank}: Payment of Rs.{amt} made to {m} via UPI from a/c {acct}. Ref {ref}. Bal Rs {bal}",
+    "Rs.{amt} auto-debited from a/c {acct} on {d} for {m} mandate. Bal Rs.{bal}",
 ]
 CREDIT = [
     "Your a/c {acct} is credited with Rs.{amt} on {d} by {p}. Ref {ref}.",
@@ -34,6 +41,9 @@ CREDIT = [
     "INR {amt} deposited to a/c {acct} on {d} - salary credit from {p} ltd.",
     "Credit alert: Rs.{amt} added to your account {acct} via IMPS from {p}. Bal Rs.{bal}",
     "Interest of Rs {amt} credited to your savings a/c {acct} on {d}.",
+    "Dear Customer, A/c {acct} has a credit of Rs {amt} on {d} from {p}. Available Bal Rs {bal}.",
+    "INR {amt} credited\nAcct {acct}\n{d}\nIMPS from {p}\nAvl Bal INR {bal}",
+    "Your a/c {acct} is credited by Rs.{amt} on {d} via NEFT from {p} ltd. Bal Rs {bal}",
 ]
 REFUND = [
     "Refund of Rs.{amt} from {m} has been processed to your a/c {acct} on {d}.",
@@ -82,6 +92,8 @@ BALANCE = [
     "Available balance in a/c {acct} is Rs.{bal} as on {d}.",
     "Your {bank} savings a/c {acct} balance is INR {bal}.",
     "Bal in a/c {acct} on {d}: Rs {bal}.",
+    "As requested, the balance in your {bank} account {acct} is Rs {bal} as of {d}.",
+    "Closing balance for a/c {acct} on {d}: INR {bal}. Cheques are subject to clearing.",
 ]
 OTHER = [
     "Your {m} order has been shipped and will be delivered tomorrow.",
@@ -140,7 +152,8 @@ def generate(n_per_kind: int = 45, seed: int = 17) -> list[RawMessage]:
         for _ in range(n_per_kind):
             code, _ = r.choice(BANKS)
             suffix = "T" if kind == "otp" else "S"
-            out.append(RawMessage("sms", f"{r.choice(['VM', 'AD', 'JD'])}-{code}-{suffix}", base, fill(r.choice(tpls)),
+            sender = r.choice([f"{r.choice(['VM', 'AD', 'JD', 'BZ', 'AX'])}-{code}-{suffix}", f"{r.choice(['VK', 'JM'])}-{code}", code])
+            out.append(RawMessage("sms", sender, base, fill(r.choice(tpls)),
                                   truth={"kind": kind, "template": f"phrase_{kind}"}))
     for kind, tpls in EMAIL_KINDS.items():
         for _ in range(n_per_kind // 2):

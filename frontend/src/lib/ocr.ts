@@ -1,5 +1,5 @@
-// In-browser OCR with tesseract.js. The worker, WASM core and English model are bundled under /ocr,
-// so nothing is downloaded from the internet and the image never leaves the device for OCR.
+// On-device OCR with tesseract.js (in the browser, or inside the Android app's WebView). The worker, WASM core and
+// English model are bundled under /ocr, so nothing is downloaded from the internet to read a receipt.
 import type Tesseract from "tesseract.js";
 
 import { api } from "@/lib/api";
@@ -81,13 +81,13 @@ export async function ocrImage(image: Blob, size: { width: number; height: numbe
 export type ReceiptField = { value: string; confidence: number; bbox: OcrLine["bbox"] | null };
 export type ReceiptFields = {
   merchant?: ReceiptField; date?: ReceiptField; total?: ReceiptField; gstin?: ReceiptField; cgst?: ReceiptField; sgst?: ReceiptField; igst?: ReceiptField;
+  due_date?: ReceiptField;
   items?: { description: string; quantity: number; amount: string; confidence: number; bbox: OcrLine["bbox"] | null }[];
 };
 
-export function parseOcr(blob: Blob, filename: string, ocr: OcrResult, dryRun = false) {
+export function parseOcr(blob: Blob, filename: string, ocr: OcrResult) {
   const fd = new FormData();
   fd.append("file", blob, filename);
   fd.append("ocr", JSON.stringify({ lines: ocr.lines, text: ocr.text, width: ocr.width, height: ocr.height }));
-  if (dryRun) fd.append("dry_run", "true");
   return api<{ fields: ReceiptFields } & Record<string, unknown>>("/receipts/parse", { method: "POST", body: fd });
 }

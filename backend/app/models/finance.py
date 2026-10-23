@@ -43,10 +43,15 @@ class Category(Base):
 
 
 class Merchant(Base):
+    """Global merchants come from the curated reference list (user_id NULL); merchants a user names themselves
+    (e.g. by correcting a scanned receipt) are private to that user."""
+
     __tablename__ = "merchants"
+    __table_args__ = (UniqueConstraint("user_id", "name"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(120), unique=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(120))
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
     interest_tags: Mapped[list[str]] = mapped_column(JSON, default=list)
 
@@ -176,7 +181,7 @@ class Goal(Base):
     target: Mapped[Decimal] = mapped_column(Money)
     saved: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
     target_date: Mapped[date] = mapped_column(Date)
-    product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
+    wishlist_item_id: Mapped[int | None] = mapped_column(ForeignKey("wishlist_items.id", ondelete="SET NULL"), nullable=True)
     keywords: Mapped[str] = mapped_column(String(200), default="")
     status: Mapped[str] = mapped_column(String(12), default="active")  # active | achieved | archived
     created_at: Mapped[datetime] = mapped_column(default=utcnow)

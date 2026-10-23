@@ -25,13 +25,28 @@ COMMON = {
     "new": {"slabs": NEW_SLABS, "std_deduction": 75000, "rebate_limit": 1200000, "rebate_max": 60000, "surcharge_cap": 25},
     "old": {"slabs": OLD_SLABS, "std_deduction": 50000, "rebate_limit": 500000, "rebate_max": 12500, "surcharge_cap": 37},
     "cess": 4,
-    "limits": {"80C": 150000, "80D": 25000, "80CCD1B": 50000, "80TTA": 10000, "24b": 200000, "pt": 2500},
+    "limits": {"80C": 150000, "80D": 25000, "80D_senior": 50000, "80CCD1B": 50000, "80TTA": 10000, "24b": 200000, "pt": 2500},
 }
+# Cities whose HRA exemption is 50% of basic (40% elsewhere). The Income-tax Rules 2026 add four cities from Tax Year 2026-27.
+METROS_1961 = {"mumbai", "delhi", "new delhi", "kolkata", "chennai"}
+METROS_2026 = METROS_1961 | {"bengaluru", "bangalore", "hyderabad", "pune", "ahmedabad"}
+LIFE_INSURERS = ("lic", "life insurance", "max life", "axis max", "hdfc life", "sbi life", "icici pru", "iciciprulife", "tata aia",
+                 "bajaj allianz life", "kotak life", "pnb metlife", "aditya birla sun life", "canara hsbc", "edelweiss tokio",
+                 "life")
+HEALTH_INSURERS = ("health", "star health", "care health", "niva bupa", "hdfc ergo", "icici lombard", "tata aig", "manipal cigna",
+                   "aditya birla health", "acko", "digit", "bajaj allianz general", "mediclaim")
+ELSS_WORDS = ("elss", "tax saver", "taxsaver", "tax saving", "tax plan", "long term equity")
 YEARS: dict[str, dict[str, Any]] = {
     "2025-26": {**COMMON, "label": "FY 2025-26", "act": "Income-tax Act, 1961", "start": date(2025, 4, 1), "end": date(2026, 3, 31),
-                "sections": {"80C": "80C", "80D": "80D", "80E": "80E", "24b": "24(b)", "hra": "10(13A) HRA", "80TTA": "80TTA"}},
+                "metros": METROS_1961,
+                "sections": {"80C": "80C", "80D": "80D", "80E": "80E", "24b": "24(b)", "hra": "10(13A) HRA", "80TTA": "80TTA",
+                             "80CCD1B": "80CCD(1B)"}},
     "2026-27": {**COMMON, "label": "Tax Year 2026-27", "act": "Income-tax Act, 2025", "start": date(2026, 4, 1), "end": date(2027, 3, 31),
-                "sections": {"80C": "s.123 (was 80C)", "80D": "80D*", "80E": "80E*", "24b": "24(b)*", "hra": "HRA*", "80TTA": "80TTA*"}},
+                "metros": METROS_2026,
+                # the 2025 Act renumbers sections; the familiar names are shown so they match payslips and Form 16
+                "sections": {"80C": "s.123 (was 80C)", "80D": "Health insurance (was 80D)", "80E": "Education-loan interest (was 80E)",
+                             "24b": "Home-loan interest (was 24(b))", "hra": "HRA", "80TTA": "Savings interest (was 80TTA)",
+                             "80CCD1B": "NPS (was 80CCD(1B))"}},
 }
 SURCHARGE = [(5000000, 10), (10000000, 15), (20000000, 25), (50000000, 37)]
 ADVANCE_TAX = [("15 Jun", 15), ("15 Sep", 45), ("15 Dec", 75), ("15 Mar", 100)]
@@ -105,9 +120,18 @@ def tax_summary(db: Session, user: User, year: str, today: date | None = None) -
     def pick(pred) -> list[Transaction]:  # noqa: ANN001
         return [t for t, c in txns if pred(t, c)]
 
-    elss = pick(lambda t, c: c.name == "Investments" and "elss" in t.merchant_name.lower())
-    lic = pick(lambda t, c: c.name == "Insurance" and ("lic" in t.merchant_name.lower() or "life" in t.merchant_name.lower()))
-    health = pick(lambda t, c: c.name == "Insurance" and "health" in t.merchant_name.lower())
+    def text(t: Transaction) -> str:
+        return f" {t.merchant_name} {t.description} {t.notes or ''} ".lower()
+
+    def has(t: Transaction, words: tuple[str, ...]) -> bool:
+        low = text(t)
+        return any(f" {w} " in low or (len(w) > 4 and w in low) for w in words)
+
+    # ELSS: a scheme name (from the fund house's email) or an ELSS/tax-saver merchant; a plain "BSE LTD" SIP is not assumed
+    elss = pick(lambda t, c: c.name == "Investments" and t.direction == "debit" and has(t, ELSS_WORDS))
+    health = pick(lambda t, c: c.name == "Insurance" and t.direction == "debit" and has(t, HEALTH_INSURERS))
+    health_ids = {t.id for t in health}
+    lic = pick(lambda t, c: c.name == "Insurance" and t.direction == "debit" and t.id not in health_ids and has(t, LIFE_INSURERS))
     rent = pick(lambda t, c: c.name == "Rent" and t.direction == "debit")
     tuition = pick(lambda t, c: c.name == "Education" and any(k in t.merchant_name.lower() for k in ("school", "tuition", "college")))
     interest = pick(lambda t, c: c.name == "Interest" and t.direction == "credit")
@@ -123,8 +147,11 @@ def tax_summary(db: Session, user: User, year: str, today: date | None = None) -
             if not rec.active:
                 continue
             n = len(rec.occurrences(today + timedelta(days=1), end))
-            key = ("elss" if "elss" in rec.merchant.lower() else "lic" if "lic" in rec.merchant.lower()
-                   else "health" if "health" in rec.merchant.lower() else "rent" if rec.category == "Rent" else None)
+            m = f" {rec.merchant.lower()} "
+            key = ("elss" if rec.category == "Investments" and any(w in m for w in ELSS_WORDS)
+                   else "health" if rec.category == "Insurance" and any(w in m for w in HEALTH_INSURERS)
+                   else "lic" if rec.category == "Insurance" and any(f" {w} " in m or (len(w) > 4 and w in m) for w in LIFE_INSURERS)
+                   else "rent" if rec.category == "Rent" else None)
             if key:
                 proj[key] += rec.amount * n
     elapsed = max(1, (cut.year - start.year) * 12 + cut.month - start.month + 1)
@@ -147,14 +174,26 @@ def tax_summary(db: Session, user: User, year: str, today: date | None = None) -
     epf = D(profile.get("employee_pf") or 0)
 
     rent_paid = _sum(rent) + proj["rent"]
-    metro_pct = Decimal("0.5") if profile.get("metro", True) else Decimal("0.4")
+    rent_source = "transactions" if rent_paid else None
+    declared_rent = D(profile.get("rent_monthly") or (user.preferences or {}).get("rent_monthly") or 0)
+    if not rent_paid and declared_rent:
+        rent_paid, rent_source = declared_rent * 12, "entered"  # the year's rent from the monthly rent you entered
+    city = (profile.get("city") or "").strip().lower()
+    if profile.get("metro") is not None:
+        is_metro = bool(profile["metro"])
+    else:
+        is_metro = city in cfg["metros"]
+    metro_pct = Decimal("0.5") if is_metro else Decimal("0.4")
     hra_exempt = max(Decimal(0), min(hra_received, rent_paid - basic * Decimal("0.1"), basic * metro_pct)) if rent_paid else Decimal(0)
     limits = cfg["limits"]
     c80_parts = {"Employee PF (from salary)": epf, "ELSS mutual fund SIPs": _sum(elss) + proj["elss"],
-                 "Life insurance premium": _sum(lic) + proj["lic"], "Tuition fees": _sum(tuition)}
+                 "Life insurance premium": _sum(lic) + proj["lic"], "Tuition fees": _sum(tuition),
+                 "Other (PPF, home-loan principal… you entered)": D(profile.get("other_80c") or 0)}
     c80 = sum(c80_parts.values(), Decimal(0))
     c80_allowed = min(c80, Decimal(limits["80C"]))
-    d80 = min(_sum(health) + proj["health"], Decimal(limits["80D"]))
+    parents_cap = Decimal(limits["80D_senior"] if profile.get("parents_senior") else limits["80D"])
+    d80 = min(_sum(health) + proj["health"], Decimal(limits["80D"])) + min(D(profile.get("health_insurance_parents") or 0), parents_cap)
+    nps = min(D(profile.get("nps_80ccd1b") or 0), Decimal(limits["80CCD1B"]))
     e80 = D(profile.get("education_loan_interest") or 0)
     b24 = min(D(profile.get("home_loan_interest") or 0), Decimal(limits["24b"]))
     tta = min(interest_total, Decimal(limits["80TTA"]))
@@ -162,7 +201,8 @@ def tax_summary(db: Session, user: User, year: str, today: date | None = None) -
 
     old_deductions = {"Standard deduction": Decimal(cfg["old"]["std_deduction"]), f"HRA exemption ({cfg['sections']['hra']})": hra_exempt,
                       "Professional tax": pt, cfg["sections"]["80C"]: c80_allowed, cfg["sections"]["80D"]: d80,
-                      cfg["sections"]["80E"]: e80, cfg["sections"]["24b"]: b24, cfg["sections"]["80TTA"]: tta}
+                      cfg["sections"]["80E"]: e80, cfg["sections"]["24b"]: b24, cfg["sections"]["80TTA"]: tta,
+                      cfg["sections"]["80CCD1B"]: nps}
     old_taxable = gross + interest_total - sum(old_deductions.values(), Decimal(0))
     new_deductions = {"Standard deduction": Decimal(cfg["new"]["std_deduction"])}
     new_taxable = gross + interest_total - sum(new_deductions.values(), Decimal(0))
@@ -182,8 +222,9 @@ def tax_summary(db: Session, user: User, year: str, today: date | None = None) -
     if d80 < limits["80D"]:
         headroom.append({"section": cfg["sections"]["80D"], "used": float(d80), "limit": limits["80D"],
                          "tip": f"{fmt_inr(Decimal(limits['80D']) - d80)} of health-insurance headroom left (old regime)."})
-    tds = D(profile.get("tds_deducted") or 0) or chosen["total"]  # assume the employer withholds the full liability
-    balance_due = max(Decimal(0), chosen["total"] - tds)
+    tds_known = profile.get("tds_deducted") is not None
+    tds = D(profile.get("tds_deducted") or 0)
+    balance_due = max(Decimal(0), chosen["total"] - tds) if tds_known else None
     evidence = [
         Evidence("ELSS SIPs", _sum(elss), _items(elss), proj["elss"]), Evidence("Life insurance", _sum(lic), _items(lic), proj["lic"]),
         Evidence("Health insurance", _sum(health), _items(health), proj["health"]), Evidence("Rent paid (for HRA)", _sum(rent), _items(rent), proj["rent"]),
@@ -205,12 +246,15 @@ def tax_summary(db: Session, user: User, year: str, today: date | None = None) -
                            "text": f"The {'new' if better == 'new' else 'old'} regime costs {fmt_inr(saving)} less for you this year."},
         "section_80c": {"parts": [{"name": k, "amount": money(v)} for k, v in c80_parts.items() if v], "total": money(c80),
                         "limit": limits["80C"], "allowed": money(c80_allowed)},
-        "hra": {"received": money(hra_received), "rent_paid": money(rent_paid), "exempt": money(hra_exempt),
-                "rule": "least of HRA received, rent paid minus 10% of basic, and 50% (metro) / 40% of basic"},
+        "hra": {"received": money(hra_received), "rent_paid": money(rent_paid), "exempt": money(hra_exempt), "rent_source": rent_source,
+                "metro": is_metro, "city": profile.get("city"), "city_known": bool(city) or profile.get("metro") is not None,
+                "rule": f"least of HRA received, rent paid minus 10% of basic, and {'50' if is_metro else '40'}% of basic "
+                        f"({'metro' if is_metro else 'non-metro'} city{'' if city or profile.get('metro') is not None else ' — set your city'})"},
         "headroom": headroom,
-        "advance_tax": {"tds_assumed": money(tds), "balance_due": money(balance_due), "needed": balance_due > 10000,
+        "advance_tax": {"tds_known": tds_known, "tds": money(tds), "balance_due": money(balance_due) if balance_due is not None else None,
+                        "needed": balance_due is not None and balance_due > 10000,
                         "schedule": [{"due": d, "cumulative_pct": p, "amount": money((balance_due * p / 100).quantize(Decimal("1")))}
-                                     for d, p in ADVANCE_TAX]},
+                                     for d, p in ADVANCE_TAX] if balance_due is not None else []},
         "evidence": [{"label": e.label, "amount": money(e.amount), "projected": money(e.projected), "items": e.items} for e in evidence],
         "profile": profile,
     }

@@ -29,7 +29,7 @@ class GoalBody(BaseModel):
     saved: float = Field(default=0, ge=0, lt=1e9)
     target_date: dt.date
     keywords: str = Field(default="", max_length=200)
-    product_id: int | None = None
+    wishlist_item_id: int | None = None
 
 
 class GoalPatch(BaseModel):
@@ -86,8 +86,16 @@ def list_goals(db: DB, user: CurrentUser) -> list[dict]:
 
 @router.post("/goals")
 def create_goal(body: GoalBody, db: DB, user: CurrentUser) -> dict:
+    from app.models import WishlistItem
+
+    item_id = body.wishlist_item_id
+    if item_id is not None:
+        item = db.get(WishlistItem, item_id)
+        if item is None or item.user_id != user.id:
+            raise HTTPException(404, "Wishlist item not found")
+    # keywords default to the goal's own name, so "what can I buy" answers can relate items to it
     g = Goal(user_id=user.id, name=body.name.strip(), target=D(body.target), saved=D(body.saved), target_date=body.target_date,
-             keywords=body.keywords, product_id=body.product_id)
+             keywords=(body.keywords or body.name).strip()[:200], wishlist_item_id=item_id)
     db.add(g)
     db.flush()
     runner.enqueue("user_analytics", user_id=user.id, db=db)

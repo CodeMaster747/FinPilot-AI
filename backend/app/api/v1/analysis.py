@@ -17,7 +17,7 @@ from app.schemas.common import iso
 from app.schemas.serialize import category_out
 from app.services.forecasting.engine import lowest_point, what_if
 from app.services.forecasting.service import latest
-from app.services.picks import safety_buffer
+from app.services.affordability import safety_buffer
 from app.services.tax import YEARS, tax_summary
 from app.services.tax_export import export_csv, export_pdf
 
@@ -38,6 +38,11 @@ class TaxProfile(BaseModel):
     tds_deducted: float | None = Field(default=None, ge=0)
     metro: bool | None = None
     city: str | None = Field(default=None, max_length=60)
+    rent_monthly: float | None = Field(default=None, ge=0)
+    other_80c: float | None = Field(default=None, ge=0, description="PPF, home-loan principal, children's tuition… not seen in transactions")
+    nps_80ccd1b: float | None = Field(default=None, ge=0)
+    health_insurance_parents: float | None = Field(default=None, ge=0)
+    parents_senior: bool | None = None
 
 
 class SubAction(BaseModel):
@@ -120,8 +125,12 @@ def get_tax(db: DB, user: CurrentUser, year: str = "2026-27") -> dict[str, Any]:
 @router.put("/tax/profile")
 def update_tax_profile(body: TaxProfile, db: DB, user: CurrentUser) -> dict:
     profile = dict(user.tax_profile or {})
-    for k, v in body.model_dump(exclude_none=True).items():
-        profile[k] = v
+    for k in body.model_fields_set:  # an explicit null clears a value
+        v = getattr(body, k)
+        if v is None:
+            profile.pop(k, None)
+        else:
+            profile[k] = v.strip() if isinstance(v, str) else v
     profile.pop("estimated", None)
     user.tax_profile = profile
     return {"ok": True, "profile": profile}

@@ -151,4 +151,18 @@
   h1, h2, h3 { letter-spacing: -0.01em; }
 }
 .tabular { font-variant-numeric: tabular-nums; }
+
+/* Safe areas. In the Android app, Capacitor's SystemBars plugin sets --safe-area-inset-* (or pads the WebView itself on
+   older WebViews, setting them to 0); in a browser, env() applies. Needs viewport-fit=cover (set in app/layout.tsx). */
+:root {
+  --sa-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --sa-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --sa-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+  --sa-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+}
+html { -webkit-tap-highlight-color: transparent; }
+/* Touch screens: larger checkboxes and radios (buttons and inputs grow through their own pointer-coarse: classes). */
+@media (pointer: coarse) {
+  input[type="checkbox"], input[type="radio"] { width: 1.15rem; height: 1.15rem; }
+}
 .recharts-wrapper:focus, .recharts-surface:focus { outline: none; }

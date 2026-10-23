@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { FlaskConical, LoaderCircle } from "lucide-react";
 
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api, ApiError } from "@/lib/api";
+import { ApiError, startSession } from "@/lib/api";
 import { useSystemStatus } from "@/lib/hooks";
+import { isNative, loadNativeState, serverUrl } from "@/lib/platform";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,14 +22,22 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"demo" | "login" | null>(null);
+  const [server, setServer] = useState<string | null>(null);
   const ready = status.data?.demo_ready ?? false;
   const boot = status.data?.bootstrap;
 
-  async function go(path: string, body?: unknown, kind: "demo" | "login" = "login") {
+  useEffect(() => {
+    loadNativeState().then(() => {
+      if (isNative() && !serverUrl()) router.replace("/connect/");
+      setServer(serverUrl());
+    });
+  }, [router]);
+
+  async function go(path: "/auth/login" | "/auth/demo", body?: unknown, kind: "demo" | "login" = "login") {
     setBusy(kind);
     setError(null);
     try {
-      await api(path, { method: "POST", body, noRedirect: true });
+      await startSession(path, body);
       qc.clear();
       router.replace("/dashboard/");
     } catch (e) {
@@ -39,25 +48,10 @@ export default function LoginPage() {
 
   return (
     <AuthLayout>
-      <h2 className="text-2xl font-semibold tracking-tight">Welcome</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Explore with a ready-made demo account, or sign in to your own.</p>
+      <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Use your FinPilot account, or create one — it takes a minute.</p>
 
-      <Button className="mt-6 h-11 w-full text-base" disabled={!ready || busy !== null} onClick={() => go("/auth/demo", undefined, "demo")}>
-        {busy === "demo" || !ready ? <LoaderCircle className="animate-spin" /> : <Sparkles />}
-        {ready ? "Try the demo" : "Preparing demo data…"}
-      </Button>
-      {!ready && (
-        <p className="mt-2 text-xs text-muted-foreground" role="status">
-          Setting up 24 months of sample data{boot?.message ? ` — ${boot.message.toLowerCase()}` : ""}
-          {boot?.progress ? ` (${boot.progress}%)` : ""}. This takes about a minute.
-        </p>
-      )}
-
-      <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="h-px flex-1 bg-border" />or sign in<span className="h-px flex-1 bg-border" />
-      </div>
-
-      <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); go("/auth/login", { email, password }); }}>
+      <form className="mt-6 grid gap-4" onSubmit={(e) => { e.preventDefault(); go("/auth/login", { email, password }); }}>
         <div className="grid gap-1.5">
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -67,13 +61,31 @@ export default function LoginPage() {
           <Input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
-        <Button type="submit" variant="outline" className="h-10" disabled={busy !== null}>
+        <Button type="submit" className="h-11" disabled={busy !== null}>
           {busy === "login" && <LoaderCircle className="animate-spin" />} Sign in
         </Button>
       </form>
-      <p className="mt-6 text-sm text-muted-foreground">
+      <p className="mt-4 text-sm text-muted-foreground">
         New here? <Link href="/register/" className="font-medium text-primary hover:underline">Create an account</Link>
       </p>
+
+      <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+        <span className="h-px flex-1 bg-border" />for presentations<span className="h-px flex-1 bg-border" />
+      </div>
+      <Button variant="outline" className="h-11 w-full" disabled={!ready || busy !== null} onClick={() => go("/auth/demo", undefined, "demo")}>
+        {busy === "demo" || !ready ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}
+        {ready ? "Explore the demo account (sample data)" : "Preparing the demo account…"}
+      </Button>
+      <p className="mt-2 text-xs text-muted-foreground" role="status">
+        {ready
+          ? "A made-up person's sample messages, clearly marked as such. It can't read your SMS or email — create your own account for that."
+          : `Setting up the sample data${boot?.message ? ` — ${boot.message.toLowerCase()}` : ""}${boot?.progress ? ` (${boot.progress}%)` : ""}.`}
+      </p>
+      {isNative() && server && (
+        <p className="mt-6 text-xs text-muted-foreground">
+          Server: {server} · <Link href="/connect/" className="underline">change</Link>
+        </p>
+      )}
     </AuthLayout>
   );
 }

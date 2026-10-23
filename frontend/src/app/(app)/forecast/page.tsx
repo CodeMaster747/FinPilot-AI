@@ -27,6 +27,8 @@ type Forecast = {
   generated_at: string;
   lowest_60: { amount: number; date: string; below_buffer: boolean; buffer: number };
   backtest: Backtest[];
+  history_days?: number;
+  backtest_min_days?: number;
 };
 type WhatIf = { lowest_before: number; lowest_after: number; lowest_after_date: string; buffer: number; stays_above_buffer: boolean; projection: Projection[] };
 
@@ -116,6 +118,14 @@ export default function ForecastPage() {
           )}
         </Card>
         <div className="grid content-start gap-4">
+          {bt.length === 0 ? (
+            <Card title="How accurate is this forecast?">
+              <p className="text-sm text-muted-foreground">
+                Accuracy is measured by replaying six past months the model hadn&apos;t seen, so it needs {f.backtest_min_days ?? 400} days of
+                history{f.history_days !== undefined ? ` — you have ${f.history_days}` : ""}. Until then, treat the range on the chart as a rough guide.
+              </p>
+            </Card>
+          ) : (<>
           <HBarChart title="How accurate is this forecast?" valueLabel="average daily error"
             subtitle={`Tested on your own history: ${bt[0]?.folds ?? 6} rolling ${bt[0]?.horizon_days ?? 30}-day windows the model hadn't seen. Lower is better.`}
             data={bt.map((b) => ({ label: b.label, value: b.mae }))} highlight={best?.label} />
@@ -146,6 +156,7 @@ export default function ForecastPage() {
               </p>
             )}
           </Card>
+          </>)}
         </div>
       </div>
 

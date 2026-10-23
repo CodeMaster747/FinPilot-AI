@@ -65,7 +65,7 @@ export default function SubscriptionsPage() {
     );
   }
   const subId = (merchant: string) => d.items.find((s) => s.merchant === merchant);
-  const active = d.items.filter((s) => s.status !== "cancelled");
+  const active = d.items.filter((s) => s.status === "active" || s.status === "dormant"); // not ones that have ended
   return (
     <>
       <PageHeader title="Subscriptions" description="Recurring charges found in your transactions, checked against emails for price changes and free trials." />

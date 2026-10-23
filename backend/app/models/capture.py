@@ -28,6 +28,30 @@ class DataSource(Base):
     paused_at: Mapped[datetime | None] = mapped_column(nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(nullable=True)
     last_ingest_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # phone sync cursor and the last sync's counts (SMS), shown as "capture health" on Connections
+    sync_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class MailboxConnection(Base):
+    """An IMAP mailbox the user connected with an app password (stored encrypted, deleted on revoke)."""
+
+    __tablename__ = "mailbox_connections"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    data_source_id: Mapped[int] = mapped_column(ForeignKey("data_sources.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(16))  # gmail | yahoo | zoho | icloud | custom
+    host: Mapped[str] = mapped_column(String(120))
+    port: Mapped[int] = mapped_column(default=993)
+    username: Mapped[str] = mapped_column(String(255))
+    secret_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    folder: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    uidvalidity: Mapped[int | None] = mapped_column(nullable=True)
+    last_uid: Mapped[int | None] = mapped_column(nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_counts: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class ConsentEvent(Base):
@@ -62,7 +86,7 @@ class IngestedMessage(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     data_source_id: Mapped[int] = mapped_column(ForeignKey("data_sources.id", ondelete="CASCADE"), index=True)
     channel: Mapped[str] = mapped_column(String(8))  # sms | email
-    feed: Mapped[str] = mapped_column(String(12))  # sample | import | simulator
+    feed: Mapped[str] = mapped_column(String(12))  # device | imap | import | sample (demo persona only)
     external_id: Mapped[str] = mapped_column(String(128))
     sender: Mapped[str] = mapped_column(String(160))
     received_at: Mapped[datetime]
@@ -108,3 +132,4 @@ class BalanceSnapshot(Base):
     balance: Mapped[Decimal] = mapped_column(Money)
     as_of: Mapped[datetime]
     message_id: Mapped[int | None] = mapped_column(ForeignKey("ingested_messages.id", ondelete="CASCADE"), nullable=True)
+    source: Mapped[str] = mapped_column(String(10), default="alert")  # alert (bank message) | manual | statement

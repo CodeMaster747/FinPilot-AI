@@ -73,13 +73,14 @@ def _classify(interval: float) -> tuple[str, float, float] | None:
 
 
 def detect_recurring(db: Session, user_id: int, today: date | None = None, min_count: int = 3,
-                     origins: set[str] | None = None) -> list[Recurring]:
+                     origins: set[str] | None = None, until: date | None = None) -> list[Recurring]:
+    """`until`: only look at payments up to that day (the forecast backtest asks "what was known back then?")."""
     today = today or date.today()
-    rows = db.execute(
-        select(Transaction, Category).join(Category, Category.id == Transaction.category_id).where(
-            Transaction.user_id == user_id, Transaction.status == "posted", Transaction.is_transfer.is_(False))
-        .order_by(Transaction.txn_date)
-    ).all()
+    q = select(Transaction, Category).join(Category, Category.id == Transaction.category_id).where(
+        Transaction.user_id == user_id, Transaction.status == "posted", Transaction.is_transfer.is_(False))
+    if until is not None:
+        q = q.where(Transaction.txn_date <= until)
+    rows = db.execute(q.order_by(Transaction.txn_date)).all()
     groups: dict[tuple[str, str], list[tuple[Transaction, Category]]] = {}
     for t, c in rows:
         if origins is not None and t.origin not in origins:

@@ -107,7 +107,7 @@ MERCHANTS: list[MerchantSpec] = [
     M("ACT Fibernet", "Phone & Internet", ("act fibernet", "atria convergence", "actcorp", "act broadband")),
     # Loans & insurance
     M("Tata Capital", "Loan EMI", ("tata capital", "tatacapital", "tata capital ltd")),
-    M("SBI Education Loan", "Loan EMI", ("education loan", "edu loan", "sbi edu loan")),
+    M("SBI Education Loan", "Loan EMI", ("sbi edu loan", "sbi education loan")),
     M("LIC of India", "Insurance", ("lic of india", "licindia", "life insurance corporation", "lic premium")),
     M("Star Health Insurance", "Insurance", ("star health", "starhealth", "star health insurance")),
     M("ICICI Lombard", "Insurance", ("icici lombard",)),
@@ -140,6 +140,17 @@ MERCHANTS: list[MerchantSpec] = [
     M("JioHotstar", "Subscriptions", ("jiohotstar", "hotstar", "disney hotstar", "star india")),
     M("Audible", "Subscriptions", ("audible", "audible in"), ("books",)),
     M("Google Play", "Subscriptions", ("google play", "googleplay", "google services")),
+    M("ChatGPT", "Subscriptions", ("openai", "chatgpt", "openai llc")),
+    M("Apple Services", "Subscriptions", ("apple com bill", "apple services", "itunes", "apple media services")),
+    M("Microsoft 365", "Subscriptions", ("microsoft", "msft", "microsoft 365", "xbox")),
+    M("SonyLIV", "Subscriptions", ("sonyliv", "sony liv", "culver max")),
+    M("ZEE5", "Subscriptions", ("zee5", "zee entertainment")),
+    M("JioSaavn", "Subscriptions", ("jiosaavn", "saavn"), ("music",)),
+    M("Amazon Music", "Subscriptions", ("amazon music",), ("music",)),
+    M("Tata Play", "Subscriptions", ("tata play", "tatasky", "tata sky")),
+    M("LinkedIn Premium", "Subscriptions", ("linkedin",)),
+    M("Swiggy One", "Subscriptions", ("swiggy one",)),
+    M("Zomato Gold", "Subscriptions", ("zomato gold",)),
     # Travel & education
     M("IRCTC", "Travel", ("irctc", "indian railway"), ("travel",)),
     M("MakeMyTrip", "Travel", ("makemytrip", "mmt"), ("travel",)),
@@ -155,7 +166,6 @@ MERCHANTS: list[MerchantSpec] = [
     # Cash, fees, income, transfers
     M("ATM Withdrawal", "Cash Withdrawal", ("atm", "cash withdrawal", "nfs atm", "atm wdl")),
     M("Bank Charges", "Fees & Charges", ("sms charges", "annual fee", "chrg", "service charge", "late fee")),
-    M("Zentrix Technologies", "Salary", ("zentrix", "zentrix technologies", "salary", "sal credit")),
     M("Interest Credit", "Interest", ("int pd", "interest credit", "interest paid", "int credit", "interest of")),
     M("ICICI Credit Card Payment", "Credit Card Payment", ("icici bank credit card", "icici credit card", "icici cc payment")),
 ]
@@ -185,10 +195,9 @@ CATEGORY_VOCAB: dict[str, list[str]] = {
 }
 
 # Senders whose email is relevant (everything else is dropped by the pre-filter, unread).
-EMAIL_ALLOWLIST_DOMAINS: tuple[str, ...] = (
-    "hdfcbank.net", "hdfcbank.com", "icicibank.com", "sbi.co.in", "onlinesbi.sbi", "axisbank.com",
-    "swiggy.in", "zomato.com", "amazon.in", "flipkart.com", "myntra.com", "bigbasket.com", "uber.com",
-    "zepto.co", "blinkit.com", "netflix.com", "spotify.com", "cult.fit", "audible.in", "airtel.com",
-    "actcorp.in", "licindia.in", "starhealth.in", "camsonline.com", "kfintech.com", "decathlon.in",
-    "irctc.co.in", "makemytrip.com", "bookmyshow.com", "jiohotstar.com", "youtube.com", "google.com",
-)
+# The demo persona's own payees: installed only for the demo account, never for real users (a real user's salary
+# credit must not be named after the persona's employer).
+PERSONA_MERCHANTS: list[MerchantSpec] = [
+    M("Zentrix Technologies", "Salary", ("zentrix", "zentrix technologies", "salary", "sal credit")),
+    M("SBI Education Loan", "Loan EMI", ("education loan", "edu loan")),
+]

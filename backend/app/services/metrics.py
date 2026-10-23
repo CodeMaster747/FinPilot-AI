@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Budget, Category, DataSource, Goal, Transaction
+from app.models import Budget, Category, Goal, Transaction
 
 
 @dataclass
@@ -37,6 +37,18 @@ def add_months(d: date, n: int) -> date:
     return date(d.year + y, m + 1, 1)
 
 
+def months_ago(d: date, months: int) -> date:
+    """The same day `months` calendar months earlier (clamped to the month's length)."""
+    y, m = divmod(d.year * 12 + d.month - 1 - months, 12)
+    m += 1
+    for day in (d.day, 30, 29, 28):
+        try:
+            return date(y, m, day)
+        except ValueError:
+            continue
+    return date(y, m, 28)
+
+
 def rows(db: Session, user_id: int, start: date | None = None, end: date | None = None, origins: set[str] | None = None) -> list[Row]:
     q = select(Transaction, Category).join(Category, Category.id == Transaction.category_id).where(
         Transaction.user_id == user_id, Transaction.status == "posted", Transaction.is_transfer.is_(False))
@@ -53,13 +65,26 @@ def rows(db: Session, user_id: int, start: date | None = None, end: date | None 
     return out
 
 
-def picks_origins(db: Session, user_id: int) -> set[str]:
-    """Purpose limitation: Smart Picks may only use sources where the user ticked the 'picks' purpose."""
-    allowed = {"manual", "receipt", "csv"}
-    for src in db.scalars(select(DataSource).where(DataSource.user_id == user_id, DataSource.status != "revoked")).all():
-        if "picks" in (src.purposes or []):
-            allowed.add(src.kind)
-    return allowed
+def coverage_start(db: Session, user_id: int) -> date | None:
+    """The first day the user's records cover (their earliest transaction)."""
+    return db.scalar(select(func.min(Transaction.txn_date)).where(Transaction.user_id == user_id, Transaction.status == "posted"))
+
+
+def first_full_month(db: Session, user_id: int) -> date | None:
+    start = coverage_start(db, user_id)
+    if start is None:
+        return None
+    return start if start.day == 1 else add_months(month_start(start), 1)
+
+
+def complete_months(db: Session, user_id: int, today: date | None = None) -> int:
+    """How many whole calendar months (before the current one) the user's records cover."""
+    today = today or date.today()
+    first = first_full_month(db, user_id)
+    if first is None:
+        return 0
+    current = month_start(today)
+    return max(0, (current.year - first.year) * 12 + current.month - first.month)
 
 
 def spend(rs: list[Row]) -> Decimal:
@@ -109,8 +134,14 @@ def monthly_series(db: Session, user_id: int, months: int, today: date | None = 
 
 
 def median_monthly(db: Session, user_id: int, months: int, pick, today: date | None = None, origins: set[str] | None = None) -> Decimal:  # noqa: ANN001
-    """Median over the last N *complete* months of the monthly total of rows matching `pick`."""
+    """Median over the last N *complete* months of the monthly total of rows matching `pick`.
+    Only months the user's records fully cover count: a user who joined last week has no complete month
+    yet (rather than five empty ones that would drag the median to ₹0)."""
     today = today or date.today()
+    covered = complete_months(db, user_id, today)
+    months = min(months, covered)
+    if months <= 0:
+        return Decimal(0)
     first = add_months(month_start(today), -months)
     rs = rows(db, user_id, first, month_start(today) - timedelta(days=1), origins)
     totals: dict[date, Decimal] = {add_months(first, i): Decimal(0) for i in range(months)}
@@ -147,5 +178,5 @@ def goals_status(db: Session, user_id: int, today: date | None = None) -> list[d
         out.append({"id": g.id, "name": g.name, "target": g.target, "saved": g.saved, "target_date": g.target_date,
                     "pct": round(float(g.saved / g.target * 100), 1) if g.target else 0.0, "remaining": remaining,
                     "months_left": months_left, "monthly_needed": (remaining / months_left).quantize(Decimal("0.01")),
-                    "product_id": g.product_id, "keywords": g.keywords})
+                    "wishlist_item_id": g.wishlist_item_id, "keywords": g.keywords})
     return out

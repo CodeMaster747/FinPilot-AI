@@ -10,7 +10,7 @@ import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api, ApiError } from "@/lib/api";
+import { ApiError, startSession } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -24,7 +24,7 @@ export default function RegisterPage() {
     setBusy(true);
     setError(null);
     try {
-      await api("/auth/register", { method: "POST", body: form, noRedirect: true });
+      await startSession("/auth/register", form);
       qc.clear();
       router.replace("/onboarding/");
     } catch (err) {
@@ -37,7 +37,7 @@ export default function RegisterPage() {
   return (
     <AuthLayout>
       <h2 className="text-2xl font-semibold tracking-tight">Create your account</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Your data stays on this computer. Nothing is read until you allow it.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Your data stays on your own FinPilot server (your laptop). Nothing is read until you allow it.</p>
       <form className="mt-6 grid gap-4" onSubmit={submit}>
         <div className="grid gap-1.5">
           <Label htmlFor="name">Name</Label>
@@ -53,7 +53,7 @@ export default function RegisterPage() {
           <span className="text-xs text-muted-foreground">At least 8 characters.</span>
         </div>
         {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
-        <Button type="submit" className="h-10" disabled={busy}>{busy && <LoaderCircle className="animate-spin" />} Create account</Button>
+        <Button type="submit" className="h-11" disabled={busy}>{busy && <LoaderCircle className="animate-spin" />} Create account</Button>
       </form>
       <p className="mt-6 text-sm text-muted-foreground">
         Already have an account? <Link href="/login/" className="font-medium text-primary hover:underline">Sign in</Link>

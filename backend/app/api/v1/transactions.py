@@ -121,7 +121,7 @@ def get_transaction(txn_id: int, db: DB, user: CurrentUser) -> dict:
 def create_transaction(body: ManualTxn, db: DB, user: CurrentUser) -> dict:
     if body.account_id and (db.get(Account, body.account_id) is None or db.get(Account, body.account_id).user_id != user.id):
         raise HTTPException(404, "Account not found")
-    res = Categorizer(db, user.id).categorize(body.merchant)
+    res = Categorizer(db, user.id).categorize(body.merchant, direction=body.direction, hint=f"{body.merchant} {body.notes or ''}")
     txn = Transaction(user_id=user.id, account_id=body.account_id, txn_date=body.date, occurred_at=datetime.combine(body.date, time(12)),
                       amount=D(body.amount), direction=body.direction, description=body.merchant, merchant_id=res.merchant_id,
                       merchant_name=res.merchant_name if res.merchant_id else body.merchant.strip(),

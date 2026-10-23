@@ -23,11 +23,20 @@ from app.services.jsonld import extract_jsonld, of_type
 TEMPLATE_FILE = Path(__file__).with_name("templates.yaml")
 
 BANKS = {
-    "HDFCBK": "HDFC Bank", "ICICIT": "ICICI Bank", "ICICIB": "ICICI Bank", "SBIINB": "State Bank of India",
-    "SBIUPI": "State Bank of India", "SBIPSG": "State Bank of India", "AXISBK": "Axis Bank", "KOTAKB": "Kotak Mahindra Bank",
-    "IDFCFB": "IDFC FIRST Bank", "YESBNK": "Yes Bank", "PNBSMS": "Punjab National Bank", "CANBNK": "Canara Bank",
-    "BOBTXN": "Bank of Baroda", "INDUSB": "IndusInd Bank", "PAYTMB": "Paytm Payments Bank", "AUBANK": "AU Small Finance Bank",
+    "HDFCBK": "HDFC Bank", "HDFCBN": "HDFC Bank", "ICICIT": "ICICI Bank", "ICICIB": "ICICI Bank", "ICICIO": "ICICI Bank",
+    "SBIINB": "State Bank of India", "SBIUPI": "State Bank of India", "SBIPSG": "State Bank of India", "ATMSBI": "State Bank of India",
+    "CBSSBI": "State Bank of India", "SBIBNK": "State Bank of India", "SBMSMS": "State Bank of India", "SBIOTP": "State Bank of India",
+    "SBICRD": "SBI Card", "SBICRT": "SBI Card", "AXISBK": "Axis Bank", "AXISMR": "Axis Bank", "KOTAKB": "Kotak Mahindra Bank",
+    "KOTAKM": "Kotak Mahindra Bank", "IDFCFB": "IDFC FIRST Bank", "YESBNK": "Yes Bank", "PNBSMS": "Punjab National Bank",
+    "PUNBNK": "Punjab National Bank", "CANBNK": "Canara Bank", "BOBTXN": "Bank of Baroda", "BOBSMS": "Bank of Baroda",
+    "BOBCRD": "BOBCARD", "INDUSB": "IndusInd Bank", "PAYTMB": "Paytm Payments Bank", "AUBANK": "AU Small Finance Bank",
     "FEDBNK": "Federal Bank", "UNIONB": "Union Bank of India", "AMEXIN": "American Express", "SCBANK": "Standard Chartered",
+    "INDBNK": "Indian Bank", "IOBCHN": "Indian Overseas Bank", "IOBSMS": "Indian Overseas Bank", "CENTBK": "Central Bank of India",
+    "BOIIND": "Bank of India", "UCOBNK": "UCO Bank", "RBLBNK": "RBL Bank", "RBLCRD": "RBL Bank", "DBSBNK": "DBS Bank",
+    "HSBCIN": "HSBC", "CITIBK": "Citibank", "IDBIBK": "IDBI Bank", "KVBANK": "Karur Vysya Bank", "CUBANK": "City Union Bank",
+    "TMBANK": "Tamilnad Mercantile Bank", "SIBSMS": "South Indian Bank", "KBLBNK": "Karnataka Bank", "EQUTAS": "Equitas Small Finance Bank",
+    "UJJIVN": "Ujjivan Small Finance Bank", "AIRBNK": "Airtel Payments Bank", "ONECRD": "OneCard", "JUPITR": "Jupiter",
+    "FIMONY": "Fi Money", "BAJAJF": "Bajaj Finance", "IHMCLF": "FASTag",
 }
 DOMAIN_BANKS = {"hdfcbank": "HDFC Bank", "icicibank": "ICICI Bank", "sbi": "State Bank of India", "axisbank": "Axis Bank"}
 BILLERS = {"TNPDCL": "TNPDCL", "AIRTEL": "Airtel", "ACTFBR": "ACT Fibernet", "JIOINF": "Jio", "BESCOM": "BESCOM",
@@ -39,27 +48,40 @@ BAL_BEFORE = re.compile(r"(?i)(avl\.?\s*bal\.?(?:ance)?|available\s+bal(?:ance)?
 LIMIT_BEFORE = re.compile(r"(?i)(avl\.?\s*lmt|avl\.?\s*limit|available\s+(?:credit\s+)?limit|credit\s+limit)[\s:\-]*(?:is)?[\s:\-]*$")
 DUE_BEFORE = re.compile(r"(?i)(minimum|min\.?)\s*(?:amount|amt)?\s*due[\s:\-]*$")
 DEBIT_WORDS = re.compile(r"(?i)\b(debited|debit(?!\s*card)|spent|sent|paid|withdrawn|purchase|deducted|charged|has been used|used for|for using|money transferred|transferred from|dr\b)")
-CREDIT_WORDS = re.compile(r"(?i)\b(credited|received|deposited|refund(?:ed)?|added to|cr\b)")
+CREDIT_WORDS = re.compile(r"(?i)\b(credited|received|deposited|refund(?:ed)?|added to|has a credit|a credit of|credit by|cr\b)")
 MASK_RES = [
-    re.compile(r"(?i)\b(?:a/?c|ac|acct|account|card)\b[^\d\n]{0,24}?[x*]{1,10}\s?(\d{3,4})\b"),
+    re.compile(r"(?i)\b(?:a/?c|ac|acct|account|card)\b[^\d\n]{0,24}?[x*.]{1,10}\s?(\d{3,5})\b"),
+    re.compile(r"(?i)\b(?:a/?c|ac|acct|account)\b[^\d\n]{0,14}?\d[x*]{2,10}(\d{3,4})\b"),  # "A/C 2XXXXX1188"
     re.compile(r"(?i)\bcard\s+(?:no\.?\s*)?(\d{4})\b"),
-    re.compile(r"(?i)\bending\s*(?:with|in)?\s*[x*]*(\d{4})\b"),
+    re.compile(r"(?i)\bending\s*(?:with|in)?\s*[x*]*(\d{4,5})\b"),
 ]
 REF_RE = re.compile(
     r"(?i)\b(?:upi\s*ref(?:erence)?(?:\s*no\.?)?|ref(?:erence)?(?:\s*(?:no\.?|number))?|refno|rrn|utr|txn\s*(?:id|no\.?)|"
     r"transaction\s*(?:id|reference\s*number))\s*(?:is)?\s*[:#.]?\s*([A-Z0-9]{6,22})"
 )
-SLASH_REF = re.compile(r"(?i)\b(?:UPI|NEFT|IMPS|RTGS)/(\d{6,22})/([^/.\n]{2,40})")
+SLASH_REF = re.compile(r"(?i)\b(?:UPI|NEFT|IMPS|RTGS)(?:/(?:P2[AMP]|CR|DR|MOB))?/([A-Z0-9]{6,24})/([^/\n]{2,48})")
+DASH_REF = re.compile(r"(?i)\bUPI-(\d{6,22})-([^.\n]{2,48})")
+REFUND_OF = re.compile(r"(?i)\brefund\s+of\s+(?:UPI|IMPS|NEFT)?[/ :-]*(\d{6,22})")
 VPA_RE = re.compile(r"\b([a-zA-Z0-9.\-_]{2,}@[a-zA-Z]{2,})\b(?!\.[a-z])")
 PAYEE_RES = [
+    re.compile(r"(?i)\b(?:Ach D|ACH DR|NACH|ECS|SI)\s?-\s*([A-Za-z][^-\n]{1,48}?)(?:\s*-|\.\s|\s+Ref\b|$)"),
+    re.compile(r"(?i)\bNEFT\s*Cr-\w+-([^-\n]{2,60}?)-"),
+    re.compile(r"(?i)\bNEFT\s*-\s*(?:[A-Z0-9]*\d[A-Z0-9]*-)?([A-Za-z][^-\n]{2,60}?)(?:-|\.\s|\s+on\b|\.$|$)"),
+    re.compile(r"(?i);\s*([A-Za-z][A-Za-z0-9 .&'-]{1,48}?)\s+credited\b"),
+    re.compile(r"(?i)\b(?:autopay|auto pay|e-?mandate|mandate)\s+(?:of|for|towards)\s+([A-Za-z][A-Za-z0-9 .&'-]{1,48}?)(?:\.\s|\.$|\s+UPI\b|\s+on\b|,|$)"),
+    re.compile(r"(?i)\btransferred to\s+(?:MR\.?|MRS\.?|MS\.?|M/S\.?)?\s*([A-Za-z][A-Za-z .&'-]{1,48}?)(?:\.\s|\.$|\s+Avl|\s+on\b|$)"),
+    re.compile(r"(?i)\btransfer from\s+([A-Za-z][A-Za-z .&'-]{1,48}?)\s+Ref"),
     re.compile(r"(?i)\btrf to\s+(.+?)\s+(?:refno|ref)\b"),
     re.compile(r"(?i)\bInfo[:\-]\s*(?:(?:UPI|NEFT|IMPS)/[^/\s]*/)?([^.\n]{2,48})"),
     re.compile(r"(?i)\btowards\s+(.+?)(?:\s+ref\b|\.\s|\.$|$)"),
     re.compile(r"(?m)^\s*To\s+([^\n]{2,48})$"),
-    re.compile(r"(?i)\b(?:at|@)\s+([A-Za-z0-9][A-Za-z0-9 &'.*\-]{2,40}?)(?:\s+on\b|\.\s|\.$|,|\n|$)"),
-    re.compile(r"(?i)\bto\s+(?:VPA\s+)?(?!your\b|a/c\b)([A-Za-z][A-Za-z0-9 &'.\-]{2,40}?)(?:\s+on\b|\s+via\b|\s+ref\b|\.\s|\.$|\n|$)"),
-    re.compile(r"(?i)\bfrom\s+(?!your\b|a/c\b)([A-Za-z][A-Za-z0-9 &'.\-]{2,40}?)(?:\s+on\b|\s+has\b|\.\s|\.$|\n|$)"),
+    re.compile(r"(?i)(?:\bat|@)\s*([A-Za-z0-9][A-Za-z0-9 &'.*\-]{2,40}?)(?:\s+on\b|\.\s|\.$|,|\n|$)"),
+    re.compile(r"(?i)\bto\s+(?:VPA\s+)?(?!your\b|a/c\b|ac\b)([A-Za-z][A-Za-z0-9 &'.\-]{2,40}?)(?:\s+on\b|\s+via\b|\s+ref\b|\s+from\b|,|\.\s|\.$|\n|$)"),
+    re.compile(r"(?i)\bfrom\s+(?!your\b|a/c\b|ac\b)([A-Za-z][A-Za-z0-9 &'.\-]{2,40}?)(?:\s+on\b|\s+has\b|\.\s|\.$|\n|$)"),
 ]
+# words that are never a payee ("subject to clearing", "towards refund of …", "to your a/c")
+NOT_PAYEE = re.compile(r"(?i)^(your|the|a/c|ac|account|card|clearing|refund(?: of)?|self|transfer|upi|neft|imps|rtgs|"
+                       r"cash deposit|branch|mob bk|net ?banking|atm|bank|vpa|.*\d{6,}.*)$")
 TIME_RE = re.compile(r"\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b")
 DATE_RES = [
     (re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b"), "ymd"),
@@ -106,9 +128,17 @@ def templates() -> list[dict[str, Any]]:
     return data
 
 
+HEADER = re.compile(r"^(?:[A-Z]{2}-)?([A-Z0-9]{6})(?:-([PSTG]))?$")
+
+
 def header_of(sender: str) -> tuple[str | None, str | None]:
-    m = re.match(r"^[A-Z]{2}-([A-Z0-9]{6})(?:-([PSTG]))?$", (sender or "").strip().upper())
-    return (m.group(1), m.group(2)) if m else (None, None)
+    """'VM-HDFCBK-S' -> ('HDFCBK', 'S'). Phones show the operator prefix and the route suffix differently, and some
+    show the bare header; a sender with no letters is a phone number, not a header."""
+    raw = (sender or "").strip().upper()
+    m = HEADER.match(raw)
+    if not m or not any(c.isalpha() for c in m.group(1)):
+        return (None, None)
+    return m.group(1), m.group(2)
 
 
 def parse_date(text: str, formats: list[str] | None = None) -> date | None:
@@ -179,8 +209,15 @@ def find_future_date(text: str, received: datetime) -> date | None:
 
 def _clean_payee(text: str) -> str:
     text = re.sub(r"\s+", " ", text).strip(" .:-,*")
-    text = re.sub(r"(?i)\s+(on|via|ref|refno|upi|avl|not you).*$", "", text)
-    return text[:80]
+    text = re.sub(r"(?i)\s+(on|via|ref|refno|upi|avl|bal|total|not you|if not)\b.*$", "", text)
+    text = re.sub(r"(?i)^(dividend|payment|purchase)\s+from\s+", "", text)
+    if re.search(r"(?i)\s+to\s+", text) and re.match(r"(?i)(upi|neft|imps|p2m|p2a|payment)\b", text):
+        text = re.split(r"(?i)\s+to\s+", text)[-1]  # "UPI P2M payment to BIGBASKET" -> "BIGBASKET"
+    return text.strip(" .:-,*")[:80]
+
+
+def _good_payee(text: str | None) -> bool:
+    return bool(text) and not NOT_PAYEE.match(text.strip())
 
 
 # -- SMS / text extraction -------------------------------------------------------------------------
@@ -257,15 +294,23 @@ def extract_generic(text: str, received: datetime, sender: str = "") -> Extracti
         ex.set("direction", "debit", 0.9, deb.span())
     elif cre:
         ex.set("direction", "credit", 0.9, cre.span())
+    elif re.search(r"(?i)\b(transaction|txn|purchase)\b.{0,60}\bcard\b.{0,60}\bat\s+\S", text):
+        ex.set("direction", "debit", 0.8)  # "Transaction of Rs X on your … Card … at MERCHANT": a card spend
     for rx in MASK_RES:
         m = rx.search(text)
         if m:
             ex.set("mask", m.group(1), 0.85, m.span(1))
             break
-    slash = SLASH_REF.search(text)
-    if slash:
+    refund_of = REFUND_OF.search(text)
+    slash = SLASH_REF.search(text) or DASH_REF.search(text)
+    if refund_of:  # "towards refund of UPI/6275…": the reference of the payment being refunded
+        ex.set("ref", refund_of.group(1), 0.9, refund_of.span(1))
+        ex.set("refund_of_ref", refund_of.group(1), 0.9, refund_of.span(1))
+    elif slash:
         ex.set("ref", slash.group(1), 0.85, slash.span(1))
-        ex.set("payee", _clean_payee(slash.group(2)), 0.75, slash.span(2))
+        payee = _clean_payee(slash.group(2))
+        if _good_payee(payee):
+            ex.set("payee", payee, 0.8, slash.span(2))
     else:
         m = REF_RE.search(text)
         if m and any(c.isdigit() for c in m.group(1)):
@@ -273,16 +318,16 @@ def extract_generic(text: str, received: datetime, sender: str = "") -> Extracti
     vpa = VPA_RE.search(text)
     if vpa:
         ex.set("vpa", vpa.group(1).lower(), 0.9, vpa.span(1))
-    if not ex.get("payee"):
-        axis_card = re.search(r"\n\d{2}-\d{2}-\d{2,4} \d{2}:\d{2}:\d{2}\n([^\n]+)\n", text)
-        if axis_card:
+    if not ex.get("payee") and not refund_of:
+        axis_card = re.search(r"\n\d{2}-\d{2}-\d{2,4},? \d{2}:\d{2}:\d{2}(?: IST)?\n([^\n]+)\n", text)
+        if axis_card and not re.match(r"(?i)(upi|neft|imps|rtgs)/", axis_card.group(1)) and _good_payee(_clean_payee(axis_card.group(1))):
             ex.set("payee", _clean_payee(axis_card.group(1)), 0.75, axis_card.span(1))
         else:
             for rx in PAYEE_RES:
                 m = rx.search(text)
                 if m:
                     payee = _clean_payee(m.group(1))
-                    if payee and not re.fullmatch(r"(?i)(your|the|a/c|account|card|.*\d{6,}.*)", payee):
+                    if _good_payee(payee):
                         ex.set("payee", payee, 0.7, m.span(1))
                         break
     if not ex.get("payee") and vpa:

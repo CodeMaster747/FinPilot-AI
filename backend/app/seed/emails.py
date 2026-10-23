@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from app.seed.persona import Notice, Persona, TruthTxn
 from app.seed.sms import inr
+from app.services.ingestion.html import html_to_text  # noqa: F401  (re-exported for the renderers)
 from app.services.ingestion.types import RawMessage
 
 USER_EMAIL = "aarav.sharma@example.com"
@@ -30,29 +31,6 @@ def _items_table(items: list[tuple[str, int, Decimal]], money_prefix: str = "₹
         for name, qty, price in items
     )
     return f"<table class='items' cellpadding='4'><tr><th>Item</th><th>Qty</th><th>Price</th></tr>{rows}</table>"
-
-
-BLOCK_TAGS = ["p", "div", "table", "tr", "li", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6", "section", "header", "footer",
-              "article", "blockquote", "pre", "hr", "title"]
-
-
-def html_to_text(markup: str) -> str:
-    """Readable text from email HTML: line breaks only at block elements, so "<b>₹649</b>" stays inside its sentence,
-    and each table row on one line with its cells separated by spaces."""
-    from bs4 import BeautifulSoup
-
-    soup = BeautifulSoup(markup, "lxml")
-    for tag in soup(["script", "style", "head"]):
-        tag.decompose()
-    for br in soup.find_all("br"):
-        br.replace_with("\n")
-    for cell in soup.find_all(["td", "th"]):
-        cell.insert_after(" ")
-    for block in soup.find_all(BLOCK_TAGS):
-        block.insert_before("\n")
-        block.insert_after("\n")
-    lines = [re.sub(r"[ \t\u00a0]+", " ", ln).strip() for ln in soup.get_text("").splitlines()]
-    return "\n".join(ln for ln in lines if ln)
 
 
 class EmailRenderer:

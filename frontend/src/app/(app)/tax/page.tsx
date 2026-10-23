@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { get, put } from "@/lib/api";
+import { downloadFile } from "@/lib/download";
 import { fmtDate, inr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -22,42 +23,72 @@ type Tax = {
   regimes: { old: Regime; new: Regime };
   recommendation: { regime: "old" | "new"; saving: number; text: string };
   section_80c: { parts: { name: string; amount: number }[]; total: number; limit: number; allowed: number };
-  hra: { received: number; rent_paid: number; exempt: number; rule: string };
+  hra: { received: number; rent_paid: number; exempt: number; rule: string; rent_source: "transactions" | "entered" | null; metro: boolean; city: string | null; city_known: boolean };
   headroom: { section: string; used: number; limit: number; tip: string }[];
-  advance_tax: { tds_assumed: number; balance_due: number; needed: boolean; schedule: { due: string; cumulative_pct: number; amount: number }[] };
+  advance_tax: { tds_known: boolean; tds: number; balance_due: number | null; needed: boolean; schedule: { due: string; cumulative_pct: number; amount: number }[] };
   evidence: { label: string; amount: number; projected: number; items: { id: number; date: string; merchant: string; amount: number }[] }[];
   profile: Record<string, string | number | boolean | null>;
   years: { id: string; label: string; act: string }[];
 };
 
 const PROFILE_FIELDS: [string, string][] = [
-  ["gross_salary", "Gross salary (FY 2025-26, from Form 16)"], ["basic_salary", "Basic salary (per year)"], ["hra_received", "HRA received (per year)"],
-  ["employee_pf", "Your PF contribution (per year)"], ["professional_tax", "Professional tax"], ["education_loan_interest", "Education-loan interest (certificate)"],
-  ["home_loan_interest", "Home-loan interest"], ["tds_deducted", "TDS deducted by employer (optional)"],
+  ["gross_salary", "Gross salary per year (FY 2025-26, from Form 16)"], ["basic_salary", "Basic salary (per year)"], ["hra_received", "HRA received (per year)"],
+  ["rent_monthly", "Rent paid per month (if not seen in your payments)"], ["employee_pf", "Your PF contribution (per year)"],
+  ["professional_tax", "Professional tax"], ["tds_deducted", "TDS deducted by your employer this year"],
+  ["other_80c", "Other 80C: PPF, home-loan principal, children's tuition…"], ["nps_80ccd1b", "Your own NPS contribution (80CCD(1B))"],
+  ["health_insurance_parents", "Health insurance you pay for your parents"], ["education_loan_interest", "Education-loan interest (certificate)"],
+  ["home_loan_interest", "Home-loan interest"],
 ];
 
 // Keyed by the saved profile, so it re-initialises from the server after every save.
 function ProfileForm({ profile, onSaved }: { profile: Tax["profile"]; onSaved: () => void }) {
   const [form, setForm] = useState<Record<string, string>>(() =>
     Object.fromEntries(PROFILE_FIELDS.map(([k]) => [k, profile[k] === null || profile[k] === undefined ? "" : String(profile[k])])));
-  const [metro, setMetro] = useState(Boolean(profile.metro ?? true));
+  const [city, setCity] = useState(String(profile.city ?? ""));
+  const [seniorParents, setSeniorParents] = useState(Boolean(profile.parents_senior));
   const save = useMutation({
-    mutationFn: () => put("/tax/profile", { ...Object.fromEntries(Object.entries(form).filter(([, v]) => v !== "").map(([k, v]) => [k, Number(v)])), metro }),
+    mutationFn: () => put("/tax/profile", {
+      ...Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v.trim() === "" ? null : Number(v)])),
+      city: city.trim() || null, parents_senior: seniorParents, metro: null,
+    }),
     onSuccess: () => { toast.success("Tax details saved"); onSaved(); },
     onError: (e) => toast.error((e as Error).message),
   });
   return (
     <form className="grid gap-3" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
       <div className="grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-1 text-sm">City you live in (for HRA)
+          <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Chennai" />
+        </label>
         {PROFILE_FIELDS.map(([k, label]) => (
           <label key={k} className="grid gap-1 text-sm">{label}
-            <Input type="number" min="0" step="1" value={form[k] ?? ""} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
+            <Input type="number" inputMode="numeric" min="0" step="1" value={form[k] ?? ""} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
           </label>
         ))}
       </div>
-      <label className="flex items-center gap-2 text-sm"><Switch checked={metro} onCheckedChange={(v) => setMetro(Boolean(v))} /> I live in a metro city (50% HRA rule)</label>
+      <label className="flex items-center gap-2 text-sm"><Switch checked={seniorParents} onCheckedChange={(v) => setSeniorParents(Boolean(v))} /> My parents are senior citizens (higher health-insurance limit)</label>
       <div className="flex justify-end"><Button type="submit" disabled={save.isPending}>{save.isPending && <LoaderCircle className="animate-spin" />} Save and recalculate</Button></div>
     </form>
+  );
+}
+
+function ExportButtons({ year }: { year: string }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  async function run(kind: "csv" | "pdf") {
+    setBusy(kind);
+    try {
+      await downloadFile(`/tax/export.${kind}`, { year }, `finpilot-tax-${year}.${kind}`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <>
+      <Button variant="outline" onClick={() => run("csv")} disabled={busy !== null}>{busy === "csv" ? <LoaderCircle className="animate-spin" /> : <Download />} CSV</Button>
+      <Button variant="outline" onClick={() => run("pdf")} disabled={busy !== null}>{busy === "pdf" ? <LoaderCircle className="animate-spin" /> : <FileText />} PDF summary</Button>
+    </>
   );
 }
 
@@ -100,14 +131,10 @@ export default function TaxPage() {
   const [open, setOpen] = useState<string | null>(null);
   const q = useQuery({ queryKey: ["tax", year], queryFn: () => get<Tax>("/tax", { year }) });
   const t = q.data;
-  const hasStar = t ? JSON.stringify(t.regimes.old.deductions).includes("*") : false;
   return (
     <>
       <PageHeader title="Tax" description="Old vs new regime, deductions found in your transactions, and what's left to claim."
-        actions={t && <>
-          <Button variant="outline" render={<a href={`/api/v1/tax/export.csv?year=${year}`} />}><Download /> CSV</Button>
-          <Button variant="outline" render={<a href={`/api/v1/tax/export.pdf?year=${year}`} />}><FileText /> PDF summary</Button>
-        </>} />
+        actions={t && <ExportButtons year={year} />} />
       <div className="mb-4 inline-flex rounded-lg bg-muted p-1" role="tablist" aria-label="Year">
         {(t?.years ?? [{ id: "2025-26", label: "FY 2025-26", act: "" }, { id: "2026-27", label: "Tax Year 2026-27", act: "" }]).map((y) => (
           <button key={y.id} type="button" role="tab" aria-selected={year === y.id} onClick={() => setYear(y.id)}
@@ -135,7 +162,10 @@ export default function TaxPage() {
               <HBarChart title="Total tax" valueLabel="tax" data={[{ label: "New regime", value: t.regimes.new.total }, { label: "Old regime", value: t.regimes.old.total }]}
                 highlight={t.recommendation.regime === "new" ? "New regime" : "Old regime"} />
               <Card title="Advance tax">
-                {t.advance_tax.needed ? (
+                {!t.advance_tax.tds_known ? (
+                  <p className="flex gap-2 text-sm text-muted-foreground"><Info className="mt-0.5 size-4 shrink-0" />
+                    Enter the TDS your employer deducts (from your payslips or Form 16) under “Your salary details” to see whether you owe advance tax.</p>
+                ) : t.advance_tax.needed ? (
                   <ul className="divide-y divide-border text-sm">
                     {t.advance_tax.schedule.map((s) => (
                       <li key={s.due} className="flex justify-between py-1.5"><span>{s.due} · {s.cumulative_pct}% by then</span><span className="tabular font-medium">{inr(s.amount)}</span></li>
@@ -143,7 +173,7 @@ export default function TaxPage() {
                   </ul>
                 ) : (
                   <p className="flex gap-2 text-sm text-muted-foreground"><CircleCheck className="mt-0.5 size-4 shrink-0 text-[var(--good)]" />
-                    Your employer&apos;s TDS ({inr(t.advance_tax.tds_assumed)}) is expected to cover the tax, so no advance-tax instalments (15 Jun, 15 Sep, 15 Dec, 15 Mar) are needed.</p>
+                    Your TDS ({inr(t.advance_tax.tds)}) covers the estimated tax, so no advance-tax instalments (15 Jun, 15 Sep, 15 Dec, 15 Mar) are needed.</p>
                 )}
               </Card>
             </div>
@@ -176,7 +206,7 @@ export default function TaxPage() {
             <Card title="HRA exemption" description={`The ${t.hra.rule}.`}>
               <ul className="divide-y divide-border text-sm">
                 <li className="flex justify-between py-1.5"><span>HRA received</span><span className="tabular">{inr(t.hra.received)}</span></li>
-                <li className="flex justify-between py-1.5"><span>Rent paid (from your transfers to your landlord)</span><span className="tabular">{inr(t.hra.rent_paid)}</span></li>
+                <li className="flex justify-between gap-2 py-1.5"><span>Rent paid {t.hra.rent_source === "entered" ? "(the monthly rent you entered × 12)" : t.hra.rent_source === "transactions" ? "(your payments to your landlord)" : "(none found — add your landlord in Settings → About you)"}</span><span className="tabular">{inr(t.hra.rent_paid)}</span></li>
                 <li className="flex justify-between py-1.5 font-semibold"><span>Exempt from tax (old regime)</span><span className="tabular">{inr(t.hra.exempt)}</span></li>
               </ul>
               {t.headroom.length > 0 && (
@@ -197,7 +227,7 @@ export default function TaxPage() {
                     <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open === e.label && "rotate-180")} />
                     <span className="flex-1">{e.label} <span className="text-xs text-muted-foreground">· {e.items.length} payments</span></span>
                     <span className="tabular font-medium">{inr(e.amount)}</span>
-                    {e.projected > 0 && <span className="w-36 text-right text-xs text-muted-foreground tabular">+ {inr(e.projected)} scheduled</span>}
+                    {e.projected > 0 && <span className="hidden w-36 text-right text-xs text-muted-foreground tabular sm:inline">+ {inr(e.projected)} scheduled</span>}
                   </button>
                   {open === e.label && (
                     <ul className="mb-2 ml-7 grid gap-0.5 text-xs text-muted-foreground">
@@ -215,7 +245,7 @@ export default function TaxPage() {
 
           <div className="mt-4 flex gap-2 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" />
-            <span>{t.disclaimer}{hasStar && " * Shown by the familiar 1961-Act section name; the Income-tax Act, 2025 renumbers these sections."}</span>
+            <span>{t.disclaimer}{t.year === "2026-27" && " The Income-tax Act, 2025 renumbers sections; the familiar names are shown so they match your payslips and Form 16."}</span>
           </div>
         </>
       )}

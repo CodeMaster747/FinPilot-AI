@@ -2,6 +2,7 @@
 
 export type Category = { id: number; name: string; group: string; kind: string; icon: string; essential: boolean; discretionary: boolean };
 export type Account = { id: number; name: string; institution: string; kind: string; mask: string | null };
+export type AccountRow = Account & { balance: number | null; movement: number; balance_known: boolean; as_of: string | null; balance_source: string };
 
 export type Txn = {
   id: number;
@@ -64,6 +65,26 @@ export type User = {
   data_end_date: string | null;
 };
 
+export type Mailbox = {
+  provider: string;
+  provider_label: string;
+  username: string;
+  host: string;
+  folder: string | null;
+  last_synced_at: string | null;
+  last_error: string | null;
+  last_counts: Record<string, number>;
+};
+
+export type SmsSync = {
+  cursor_ms: number | null;
+  backfill_start_ms: number;
+  last_sync_at: string | null;
+  last: Record<string, number>;
+  totals: Record<string, number>;
+  device: { manufacturer?: string; sdk?: number } | null;
+};
+
 export type Source = {
   kind: "sms" | "email";
   title: string;
@@ -74,6 +95,8 @@ export type Source = {
   last_ingest_at: string | null;
   counts: Record<string, number>;
   notice_current?: boolean;
+  sync?: SmsSync;
+  mailbox?: Mailbox | null;
 };
 
 export type Notice = {
@@ -88,16 +111,6 @@ export type Notice = {
   hash: string;
 };
 
-export type SimOutcome = {
-  status: string;
-  detail: string;
-  kind: string | null;
-  confidence: number | null;
-  fields: Record<string, { value: unknown; confidence: number }> | null;
-  parser: string | null;
-  transaction: Txn | null;
-};
-
 export type Job = { id: number; kind: string; status: string; progress: number; message: string | null; result: unknown; error: string | null };
 
 export type Projection = { date: string; p10: number; p50: number; p90: number };
@@ -108,58 +121,58 @@ export type AnomalyGroup = { transaction: Txn; detectors: string[]; explanations
 
 export type Dashboard = {
   preparing: boolean;
+  has_data: boolean;
+  months_of_data: number;
   kpis: {
-    balance: number;
+    balance: number | null;
+    balance_known: boolean;
     income_month: number;
     spend_month: number;
     spend_last_month: number;
     savings_rate_last_month: number;
+    safe_basis: "balance" | "wants" | "none" | null;
     safe_to_spend: number | null;
     safe_to_spend_total: number | null;
     wants_left: number | null;
+    buffer: number | null;
     net_next_30: number | null;
     lowest_30: { amount: number; date: string } | null;
   };
-  accounts: { name: string; kind: string; balance: number }[];
+  accounts: { id: number; name: string; kind: string; balance: number | null; balance_source: string }[];
   cashflow: { month: string; income: number; spend: number; invested: number; savings_rate: number }[];
   balance: { history: { date: string; balance: number }[]; projection: Projection[] };
   categories: { category: string; amount: number }[];
   anomalies: AnomalyGroup[];
   insights: Insight[];
   upcoming: { date: string; name: string; amount: number; category: string; source: string }[];
-  picks: { id: number; tier: string; title: string; price: number; reason: string }[];
+  wishlist: { id: number; tier: string; title: string; price: number | null; reason: string }[];
   sources: { kind: string; title: string; status: string; last_ingest_at: string | null }[];
   budgets: { id: number; category: string; icon: string; budget: number; spent: number; pct: number; pace_pct: number; over_pace: boolean; over: boolean }[];
 };
 
-export type Product = {
-  id: number;
-  title: string;
-  brand: string;
-  category: string;
-  price: number;
-  mrp: number;
-  discount_pct: number;
-  rating: number;
-  rating_count: number;
-  store: string;
-  url: string;
-  image: string | null;
-  tags: string[];
-  history: { date: string; price: number }[];
-  low_30: number;
-  median_30: number;
-};
+export type Tier = "buy_now" | "goal" | "save_up" | "not_now" | "needs_price";
 
-export type Pick = {
+export type WishItem = {
   id: number;
-  tier: "buy_now" | "goal" | "save_up";
-  score: number;
+  text: string;
+  price: number | null;
+  price_source: "manual" | "link" | null;
+  max_price: number | null;
+  url: string | null;
+  store: string | null;
+  image_url: string | null;
+  fetch_status: string | null;
+  fetch_note: string | null;
+  last_checked_at: string | null;
+  created_at: string;
+  active: boolean;
+  history: { date: string; price: number }[];
+  tier: Tier;
+  goal_id: number | null;
+  months: number | null;
+  monthly: number | null;
+  impact: { lowest_before: number; lowest_after: number; date: string; buffer: number; stays_above_buffer: boolean } | null;
   reasons: string[];
-  impact: { lowest_before?: number; lowest_after?: number; buffer?: number; stays_above_buffer?: boolean; months?: number | null; monthly?: number | null };
-  interest: string;
-  status: string;
-  product: Product;
 };
 
 export type AffordSnapshot = {
@@ -178,10 +191,13 @@ export type AffordSnapshot = {
   wants_budget: number;
   wants_spent: number;
   wants_left: number;
+  wants_known: boolean;
+  spendable: number;
   emergency_ok: boolean;
-  origins: string[];
+  income_source: "history" | "profile" | "none";
+  balance_known: boolean;
+  months_of_data: number;
   explain: string[];
-  complete: boolean;
 };
 
 export type Verdict = { tier: "buy_now" | "save_up" | "not_now"; months: number | null; monthly: number | null; text: string;

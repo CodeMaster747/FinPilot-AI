@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated or third-party: the Capacitor Android project and the bundled tesseract.js worker/cores.
+    "android/**",
+    "public/ocr/**",
   ]),
 ]);
 

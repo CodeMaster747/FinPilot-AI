@@ -22,6 +22,14 @@ KINDS = (
 )
 
 
+def sms_external_id(sender: str, epoch_ms: int | None, body: str) -> str:
+    """One identity per SMS whichever way it reaches FinPilot (the phone app, a backup file, pasted text):
+    sender + the phone's own timestamp + text. Without a timestamp (pasted text), sender + text."""
+    stamp = str(int(epoch_ms)) if epoch_ms is not None else "-"
+    key = f"{(sender or '').strip().upper()}|{stamp}|{body or ''}"
+    return "sms:" + hashlib.sha1(key.encode("utf-8")).hexdigest()
+
+
 @dataclass
 class RawMessage:
     channel: str  # sms | email

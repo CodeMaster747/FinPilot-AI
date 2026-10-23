@@ -47,10 +47,10 @@ def create_access_token(user_id: int) -> tuple[str, datetime]:
     return token, exp
 
 
-def create_refresh_token(user_id: int) -> tuple[str, str, datetime]:
+def create_refresh_token(user_id: int, days: int | None = None) -> tuple[str, str, datetime]:
     settings = get_settings()
     jti = uuid.uuid4().hex
-    exp = _now() + timedelta(days=settings.refresh_ttl_days)
+    exp = _now() + timedelta(days=days or settings.refresh_ttl_days)
     token = jwt.encode(
         {"sub": str(user_id), "type": "refresh", "jti": jti, "exp": exp}, settings.secret_key, ALGORITHM
     )
