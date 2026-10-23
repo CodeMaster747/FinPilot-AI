@@ -53,7 +53,7 @@ const TABS = [
   { href: "/dashboard/", label: "Home", icon: Gauge },
   { href: "/transactions/", label: "Transactions", icon: ArrowLeftRight },
   { href: "/scan/", label: "Scan", icon: ScanLine },
-  { href: "/insights/", label: "Coach", icon: Lightbulb },
+  { href: "/smart-pick/", label: "Smart Pick", icon: Sparkles },
 ];
 
 const JOB_LABELS: Record<string, string> = {
